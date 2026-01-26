@@ -7,6 +7,7 @@ import { ImageUploader } from '@/components/ImageUploader';
 import { CaptionDisplay } from '@/components/CaptionDisplay';
 import { AccessibilityInfo } from '@/components/AccessibilityInfo';
 import { LanguageSelector } from '@/components/LanguageSelector';
+import { VoiceSelector, VOICE_OPTIONS } from '@/components/VoiceSelector';
 import { SafetyAlerts } from '@/components/SafetyAlerts';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { useImageCaption } from '@/hooks/useImageCaption';
@@ -17,6 +18,7 @@ import { toast } from '@/hooks/use-toast';
 const Index = () => {
   const [currentImage, setCurrentImage] = useState<string | null>(null);
   const [selectedLanguage, setSelectedLanguage] = useState('en');
+  const [selectedVoice, setSelectedVoice] = useState(VOICE_OPTIONS[0].id); // Laura - natural voice
   const { speak, stop, isSpeaking, isSupported, setLanguage } = useTextToSpeech(selectedLanguage);
   const { caption, translatedCaption, safetyAlerts, isLoading, generateCaption, clearCaption } = useImageCaption();
   const { addToHistory } = useCaptionHistory();
@@ -37,12 +39,12 @@ const Index = () => {
     const textToSpeak = translatedCaption || caption;
     if (textToSpeak) {
       if (safetyAlerts.length > 0) {
-        speak(`Warning! ${safetyAlerts.join('. ')}. ${textToSpeak}`, selectedLanguage);
+        speak(`Warning! ${safetyAlerts.join('. ')}. ${textToSpeak}`, selectedLanguage, selectedVoice);
       } else {
-        speak(textToSpeak, selectedLanguage);
+        speak(textToSpeak, selectedLanguage, selectedVoice);
       }
     }
-  }, [caption, translatedCaption, safetyAlerts, speak, selectedLanguage]);
+  }, [caption, translatedCaption, safetyAlerts, speak, selectedLanguage, selectedVoice]);
 
   const handleSave = useCallback(() => {
     if (currentImage && caption) {
@@ -80,14 +82,14 @@ const Index = () => {
       const textToSpeak = translatedCaption || caption;
       const timer = setTimeout(() => {
         if (safetyAlerts.length > 0) {
-          speak(`Warning! ${safetyAlerts.join('. ')}. ${textToSpeak}`, selectedLanguage);
+          speak(`Warning! ${safetyAlerts.join('. ')}. ${textToSpeak}`, selectedLanguage, selectedVoice);
         } else {
-          speak(textToSpeak, selectedLanguage);
+          speak(textToSpeak, selectedLanguage, selectedVoice);
         }
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [caption, translatedCaption, safetyAlerts, isSupported, isLoading, speak, selectedLanguage]);
+  }, [caption, translatedCaption, safetyAlerts, isSupported, isLoading, speak, selectedLanguage, selectedVoice]);
 
   return (
     <>
@@ -113,10 +115,14 @@ const Index = () => {
           {/* Header with navigation */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
             <HeroSection />
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
               <LanguageSelector
                 selectedLanguage={selectedLanguage}
                 onLanguageChange={handleLanguageChange}
+              />
+              <VoiceSelector
+                selectedVoice={selectedVoice}
+                onVoiceChange={setSelectedVoice}
               />
               <Link to="/history">
                 <Button variant="outline" size="lg" aria-label="View caption history">
