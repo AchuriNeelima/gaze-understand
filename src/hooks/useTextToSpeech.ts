@@ -26,7 +26,7 @@ const LANGUAGE_VOICE_MAP: Record<string, string[]> = {
 };
 
 interface UseTextToSpeechReturn {
-  speak: (text: string, languageCode?: string) => void;
+  speak: (text: string, languageCode?: string, voiceId?: string) => void;
   stop: () => void;
   isSpeaking: boolean;
   isSupported: boolean;
@@ -190,7 +190,7 @@ export const useTextToSpeech = (initialLanguage: string = 'en'): UseTextToSpeech
     return true;
   }, [findVoiceForLanguage]);
 
-  const speak = useCallback(async (text: string, languageCode?: string) => {
+  const speak = useCallback(async (text: string, languageCode?: string, voiceId?: string) => {
     if (!text) return;
 
     const langToUse = languageCode || currentLanguage;
@@ -208,10 +208,10 @@ export const useTextToSpeech = (initialLanguage: string = 'en'): UseTextToSpeech
 
     try {
       // Try cloud TTS first for better quality
-      console.log(`Attempting cloud TTS for language: ${langToUse}`);
+      console.log(`Attempting cloud TTS for language: ${langToUse}, voice: ${voiceId || 'default'}`);
       
       const { data, error } = await supabase.functions.invoke('text-to-speech', {
-        body: { text, language: langToUse },
+        body: { text, language: langToUse, voiceId },
       });
 
       if (error) {

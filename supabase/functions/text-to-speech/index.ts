@@ -6,15 +6,34 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// ElevenLabs voice IDs for different language tones
-const VOICE_IDS = {
-  default: "EXAVITQu4vr4xnSDxMaL", // Sarah - good for general use
-  female: "EXAVITQu4vr4xnSDxMaL", // Sarah
-  male: "JBFqnCBsd6RMkjVDRZzb", // George
+// Default voice - natural sounding for Indian languages
+const DEFAULT_VOICE_ID = "FGY2WhTYpPnrIDTdsKH5"; // Laura - warm and natural
+
+// Language codes that ElevenLabs multilingual v2 supports
+const ELEVENLABS_SUPPORTED = ['en', 'hi', 'te', 'ta', 'bn', 'gu', 'kn', 'ml', 'mr', 'pa', 'es', 'fr', 'de', 'it', 'pt', 'pl', 'ru', 'nl', 'tr', 'sv', 'id', 'fil', 'ja', 'ko', 'zh', 'ar', 'cs', 'da', 'fi', 'el', 'hu', 'ro', 'sk', 'uk', 'vi', 'bg', 'hr', 'ms'];
+
+// Optimized voice settings for Indian languages (Telugu, Hindi, etc.)
+// Lower stability = more expressive and natural
+// Higher style = more characteristic pronunciation
+const INDIAN_LANGUAGE_SETTINGS = {
+  stability: 0.35,        // Lower for more natural variation
+  similarity_boost: 0.65, // Moderate to allow natural adaptation
+  style: 0.45,           // Higher for more expressive speech
+  use_speaker_boost: true,
+  speed: 0.85,           // Slightly slower for clearer pronunciation
 };
 
-// Language codes that ElevenLabs multilingual v2 supports well
-const ELEVENLABS_SUPPORTED = ['en', 'hi', 'te', 'ta', 'bn', 'gu', 'kn', 'ml', 'mr', 'pa', 'es', 'fr', 'de', 'it', 'pt', 'pl', 'ru', 'nl', 'tr', 'sv', 'id', 'fil', 'ja', 'ko', 'zh', 'ar', 'cs', 'da', 'fi', 'el', 'hu', 'ro', 'sk', 'uk', 'vi', 'bg', 'hr', 'ms'];
+// Standard settings for other languages
+const STANDARD_SETTINGS = {
+  stability: 0.5,
+  similarity_boost: 0.75,
+  style: 0.3,
+  use_speaker_boost: true,
+  speed: 0.9,
+};
+
+// Indian languages that need special settings
+const INDIAN_LANGUAGES = ['te', 'hi', 'ta', 'bn', 'gu', 'kn', 'ml', 'mr', 'pa'];
 
 // Google Cloud TTS language codes
 const GOOGLE_TTS_LANGS: Record<string, string> = {
@@ -39,7 +58,7 @@ serve(async (req) => {
   }
 
   try {
-    const { text, language = "en" } = await req.json();
+    const { text, language = "en", voiceId } = await req.json();
 
     if (!text) {
       return new Response(
@@ -48,7 +67,7 @@ serve(async (req) => {
       );
     }
 
-    console.log(`TTS request - Language: ${language}, Text length: ${text.length}`);
+    console.log(`TTS request - Language: ${language}, Text length: ${text.length}, Voice: ${voiceId || 'default'}`);
 
     // Check for ElevenLabs API key first
     const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
@@ -59,11 +78,19 @@ serve(async (req) => {
     // Try ElevenLabs for supported languages
     if (ELEVENLABS_API_KEY && ELEVENLABS_SUPPORTED.includes(language)) {
       try {
-        console.log("Using ElevenLabs TTS");
-        const voiceId = VOICE_IDS.female;
+        console.log("Using ElevenLabs TTS with optimized settings");
+        
+        // Use provided voice or default
+        const selectedVoice = voiceId || DEFAULT_VOICE_ID;
+        
+        // Use Indian language settings for Telugu, Hindi, etc.
+        const isIndianLanguage = INDIAN_LANGUAGES.includes(language);
+        const voiceSettings = isIndianLanguage ? INDIAN_LANGUAGE_SETTINGS : STANDARD_SETTINGS;
+        
+        console.log(`Using ${isIndianLanguage ? 'Indian' : 'Standard'} voice settings for ${language}`);
         
         const response = await fetch(
-          `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
+          `https://api.elevenlabs.io/v1/text-to-speech/${selectedVoice}?output_format=mp3_44100_128`,
           {
             method: "POST",
             headers: {
@@ -73,13 +100,7 @@ serve(async (req) => {
             body: JSON.stringify({
               text,
               model_id: "eleven_multilingual_v2",
-              voice_settings: {
-                stability: 0.5,
-                similarity_boost: 0.75,
-                style: 0.3,
-                use_speaker_boost: true,
-                speed: 0.9,
-              },
+              voice_settings: voiceSettings,
             }),
           }
         );
