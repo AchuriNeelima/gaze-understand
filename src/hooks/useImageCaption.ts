@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
 
 interface CaptionResult {
   caption: string;
