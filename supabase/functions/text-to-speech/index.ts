@@ -14,7 +14,7 @@ const VOICE_IDS = {
 };
 
 // Language codes that ElevenLabs multilingual v2 supports well
-const ELEVENLABS_SUPPORTED = ['en', 'hi', 'es', 'fr', 'de', 'it', 'pt', 'pl', 'ru', 'nl', 'tr', 'sv', 'id', 'fil', 'ja', 'ko', 'zh', 'ar', 'cs', 'da', 'fi', 'el', 'hu', 'ro', 'sk', 'uk', 'vi', 'bg', 'hr', 'ms', 'ta'];
+const ELEVENLABS_SUPPORTED = ['en', 'hi', 'te', 'ta', 'bn', 'gu', 'kn', 'ml', 'mr', 'pa', 'es', 'fr', 'de', 'it', 'pt', 'pl', 'ru', 'nl', 'tr', 'sv', 'id', 'fil', 'ja', 'ko', 'zh', 'ar', 'cs', 'da', 'fi', 'el', 'hu', 'ro', 'sk', 'uk', 'vi', 'bg', 'hr', 'ms'];
 
 // Google Cloud TTS language codes
 const GOOGLE_TTS_LANGS: Record<string, string> = {
