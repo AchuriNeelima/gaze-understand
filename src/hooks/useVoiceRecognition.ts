@@ -106,16 +106,6 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
       if (command === 'unknown') {
         setError('Command not recognized. Please try again.');
         shouldRelistenRef.current = true;
-        // Speak feedback then re-listen
-        speakFeedback('Command not recognized. Please try again.').then(() => {
-          if (shouldRelistenRef.current) {
-            shouldRelistenRef.current = false;
-            // Small delay before re-listening
-            setTimeout(() => {
-              beginRecognition();
-            }, 300);
-          }
-        });
       }
     };
 
@@ -146,11 +136,15 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
 
     recognition.start();
 
-    // Auto-stop after 8 seconds
     timeoutRef.current = setTimeout(() => {
-      stopListening();
+      shouldRelistenRef.current = false;
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      setIsListening(false);
     }, 8000);
-  }, [SpeechRecognitionAPI, stopListening]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [SpeechRecognitionAPI]);
 
   const startListening = useCallback(async () => {
     if (!SpeechRecognitionAPI) {
@@ -168,6 +162,18 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     await speakFeedback('Listening for command. Please say upload image, capture image, submit, or reset.');
     beginRecognition();
   }, [SpeechRecognitionAPI, beginRecognition]);
+
+  // Re-listen after unrecognized command
+  useEffect(() => {
+    if (lastCommand === 'unknown' && shouldRelistenRef.current) {
+      shouldRelistenRef.current = false;
+      speakFeedback('Command not recognized. Please try again.').then(() => {
+        setTimeout(() => {
+          beginRecognition();
+        }, 300);
+      });
+    }
+  }, [lastCommand, beginRecognition]);
 
   useEffect(() => {
     return () => {
