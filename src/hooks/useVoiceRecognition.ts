@@ -29,6 +29,25 @@ function matchCommand(text: string): VoiceCommand {
   return 'unknown';
 }
 
+/** Speak text using browser SpeechSynthesis and return a promise that resolves when done */
+function speakFeedback(text: string): Promise<void> {
+  return new Promise((resolve) => {
+    if (!('speechSynthesis' in window)) {
+      resolve();
+      return;
+    }
+    // Cancel any ongoing speech first
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.onend = () => resolve();
+    utterance.onerror = () => resolve();
+    window.speechSynthesis.speak(utterance);
+  });
+}
+
 export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
   const [isListening, setIsListening] = useState(false);
   const [recognizedText, setRecognizedText] = useState<string | null>(null);
@@ -36,6 +55,7 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
   const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const shouldRelistenRef = useRef(false);
 
   const SpeechRecognitionAPI =
     typeof window !== 'undefined'
@@ -51,6 +71,7 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
   }, []);
 
   const stopListening = useCallback(() => {
+    shouldRelistenRef.current = false;
     if (recognitionRef.current) {
       recognitionRef.current.stop();
     }
@@ -61,15 +82,8 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     setIsListening(false);
   }, []);
 
-  const startListening = useCallback(() => {
-    if (!SpeechRecognitionAPI) {
-      setError('Voice recognition is not supported in this browser.');
-      return;
-    }
-
-    setError(null);
-    setRecognizedText(null);
-    setLastCommand(null);
+  const beginRecognition = useCallback(() => {
+    if (!SpeechRecognitionAPI) return;
 
     const recognition = new SpeechRecognitionAPI();
     recognitionRef.current = recognition;
@@ -88,19 +102,35 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
       setRecognizedText(transcript);
       const command = matchCommand(transcript);
       setLastCommand(command);
+
       if (command === 'unknown') {
         setError('Command not recognized. Please try again.');
+        shouldRelistenRef.current = true;
+        // Speak feedback then re-listen
+        speakFeedback('Command not recognized. Please try again.').then(() => {
+          if (shouldRelistenRef.current) {
+            shouldRelistenRef.current = false;
+            // Small delay before re-listening
+            setTimeout(() => {
+              beginRecognition();
+            }, 300);
+          }
+        });
       }
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       setIsListening(false);
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-        setError('Microphone permission denied. Please allow microphone access.');
+        const msg = 'Microphone access denied. Please enable microphone permission.';
+        setError(msg);
+        speakFeedback(msg);
       } else if (event.error === 'no-speech') {
         setError('No speech detected. Please try again.');
+        speakFeedback('No speech detected. Please try again.');
       } else if (event.error === 'network') {
         setError('Network error. Please check your connection.');
+        speakFeedback('Network error. Please check your connection.');
       } else {
         setError(`Recognition error: ${event.error}`);
       }
@@ -122,8 +152,26 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     }, 8000);
   }, [SpeechRecognitionAPI, stopListening]);
 
+  const startListening = useCallback(async () => {
+    if (!SpeechRecognitionAPI) {
+      const msg = 'Voice recognition is not supported in this browser.';
+      setError(msg);
+      speakFeedback(msg);
+      return;
+    }
+
+    setError(null);
+    setRecognizedText(null);
+    setLastCommand(null);
+
+    // Speak the prompt first, then start listening
+    await speakFeedback('Listening for command. Please say upload image, capture image, submit, or reset.');
+    beginRecognition();
+  }, [SpeechRecognitionAPI, beginRecognition]);
+
   useEffect(() => {
     return () => {
+      shouldRelistenRef.current = false;
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
@@ -144,3 +192,5 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     isSupported,
   };
 };
+
+export { speakFeedback };
