@@ -238,4 +238,18 @@
       transform: scale(1);
     }
   }
+
+  /* Voice listening glow */
+  .voice-listening {
+    animation: voiceGlow 1.5s ease-in-out infinite;
+  }
+
+  @keyframes voiceGlow {
+    0%, 100% {
+      box-shadow: 0 0 8px hsl(var(--primary) / 0.4);
+    }
+    50% {
+      box-shadow: 0 0 20px hsl(var(--primary) / 0.7), 0 0 40px hsl(var(--primary) / 0.3);
+    }
+  }
 }

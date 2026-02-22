@@ -8,6 +8,7 @@ import { CaptionDisplay } from '@/components/CaptionDisplay';
 import { AccessibilityInfo } from '@/components/AccessibilityInfo';
 import { LanguageSelector } from '@/components/LanguageSelector';
 import { VoiceSelector, VOICE_OPTIONS } from '@/components/VoiceSelector';
+import { VoiceCommandButton } from '@/components/VoiceCommandButton';
 import { SafetyAlerts } from '@/components/SafetyAlerts';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { useImageCaption } from '@/hooks/useImageCaption';
@@ -123,6 +124,15 @@ const Index = () => {
               <VoiceSelector
                 selectedVoice={selectedVoice}
                 onVoiceChange={setSelectedVoice}
+              />
+              <VoiceCommandButton
+                onUpload={() => document.getElementById('file-input')?.click()}
+                onCapture={() => {
+                  // Click the "Take Photo" button in ImageUploader
+                  const cameraBtn = document.querySelector('[aria-label="Open camera to take a photo"]') as HTMLButtonElement;
+                  cameraBtn?.click();
+                }}
+                onReset={handleClear}
               />
               <Link to="/history">
                 <Button variant="outline" size="lg" aria-label="View caption history">
