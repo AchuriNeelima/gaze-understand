@@ -1,4 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import type {
+  SpeechRecognitionInstance,
+  SpeechRecognitionConstructor,
+  SpeechRecognitionEvent,
+  SpeechRecognitionErrorEvent,
+} from '@/types/speech-recognition';
 
 type VoiceCommand = 'upload' | 'capture' | 'submit' | 'reset' | 'unknown';
 
@@ -36,7 +42,6 @@ function speakFeedback(text: string): Promise<void> {
       resolve();
       return;
     }
-    // Cancel any ongoing speech first
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'en-US';
@@ -48,20 +53,22 @@ function speakFeedback(text: string): Promise<void> {
   });
 }
 
+function getSpeechRecognitionAPI(): SpeechRecognitionConstructor | null {
+  if (typeof window === 'undefined') return null;
+  const win = window as unknown as Record<string, unknown>;
+  return (win.SpeechRecognition ?? win.webkitSpeechRecognition ?? null) as SpeechRecognitionConstructor | null;
+}
+
 export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
   const [isListening, setIsListening] = useState(false);
   const [recognizedText, setRecognizedText] = useState<string | null>(null);
   const [lastCommand, setLastCommand] = useState<VoiceCommand | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const recognitionRef = useRef<any>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shouldRelistenRef = useRef(false);
 
-  const SpeechRecognitionAPI =
-    typeof window !== 'undefined'
-      ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-      : null;
-
+  const SpeechRecognitionAPI = getSpeechRecognitionAPI();
   const isSupported = !!SpeechRecognitionAPI;
 
   const clearRecognizedText = useCallback(() => {
@@ -158,7 +165,6 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     setRecognizedText(null);
     setLastCommand(null);
 
-    // Speak the prompt first, then start listening
     await speakFeedback('Listening for command. Please say upload image, capture image, submit, or reset.');
     beginRecognition();
   }, [SpeechRecognitionAPI, beginRecognition]);
