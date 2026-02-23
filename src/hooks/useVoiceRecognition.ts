@@ -6,37 +6,41 @@ import type {
   SpeechRecognitionErrorEvent,
 } from '@/types/speech-recognition';
 
-type VoiceCommand = 'upload' | 'capture' | 'submit' | 'reset' | 'unknown';
+type VoiceCommand = 'open_camera' | 'capture';
 
 interface UseVoiceRecognitionReturn {
   isListening: boolean;
   recognizedText: string | null;
   lastCommand: VoiceCommand | null;
   error: string | null;
-  startListening: () => void;
+  startListening: (prompt?: string) => void;
   stopListening: () => void;
-  clearRecognizedText: () => void;
+  clearLastCommand: () => void;
   isSupported: boolean;
 }
 
 const COMMAND_MAP: { patterns: RegExp[]; command: VoiceCommand }[] = [
-  { patterns: [/upload\s*image/i, /upload/i, /choose\s*file/i, /select\s*file/i, /open\s*file/i], command: 'upload' },
-  { patterns: [/capture\s*image/i, /capture/i, /take\s*photo/i, /camera/i, /take\s*picture/i], command: 'capture' },
-  { patterns: [/submit/i, /send/i, /generate/i, /describe/i], command: 'submit' },
-  { patterns: [/reset/i, /clear/i, /remove/i, /delete/i, /start\s*over/i], command: 'reset' },
+  {
+    patterns: [/open\s*camera/i, /start\s*camera/i, /camera/i],
+    command: 'open_camera',
+  },
+  {
+    patterns: [/capture/i, /click\s*image/i, /take\s*photo/i, /take\s*picture/i, /snap/i, /shoot/i],
+    command: 'capture',
+  },
 ];
 
-function matchCommand(text: string): VoiceCommand {
+function matchCommand(text: string): VoiceCommand | null {
   for (const { patterns, command } of COMMAND_MAP) {
     for (const pattern of patterns) {
       if (pattern.test(text)) return command;
     }
   }
-  return 'unknown';
+  return null;
 }
 
 /** Speak text using browser SpeechSynthesis and return a promise that resolves when done */
-function speakFeedback(text: string): Promise<void> {
+export function speakFeedback(text: string): Promise<void> {
   return new Promise((resolve) => {
     if (!('speechSynthesis' in window)) {
       resolve();
@@ -71,9 +75,9 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
   const SpeechRecognitionAPI = getSpeechRecognitionAPI();
   const isSupported = !!SpeechRecognitionAPI;
 
-  const clearRecognizedText = useCallback(() => {
-    setRecognizedText(null);
+  const clearLastCommand = useCallback(() => {
     setLastCommand(null);
+    setRecognizedText(null);
     setError(null);
   }, []);
 
@@ -108,9 +112,11 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
       const transcript = event.results[0][0].transcript.trim();
       setRecognizedText(transcript);
       const command = matchCommand(transcript);
-      setLastCommand(command);
 
-      if (command === 'unknown') {
+      if (command) {
+        setLastCommand(command);
+        setError(null);
+      } else {
         setError('Command not recognized. Please try again.');
         shouldRelistenRef.current = true;
       }
@@ -153,7 +159,7 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [SpeechRecognitionAPI]);
 
-  const startListening = useCallback(async () => {
+  const startListening = useCallback(async (prompt?: string) => {
     if (!SpeechRecognitionAPI) {
       const msg = 'Voice recognition is not supported in this browser.';
       setError(msg);
@@ -165,13 +171,14 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     setRecognizedText(null);
     setLastCommand(null);
 
-    await speakFeedback('Listening for command. Please say upload image, capture image, submit, or reset.');
+    const spokenPrompt = prompt || 'Listening for command. Say open camera, or capture.';
+    await speakFeedback(spokenPrompt);
     beginRecognition();
   }, [SpeechRecognitionAPI, beginRecognition]);
 
   // Re-listen after unrecognized command
   useEffect(() => {
-    if (lastCommand === 'unknown' && shouldRelistenRef.current) {
+    if (error === 'Command not recognized. Please try again.' && shouldRelistenRef.current) {
       shouldRelistenRef.current = false;
       speakFeedback('Command not recognized. Please try again.').then(() => {
         setTimeout(() => {
@@ -179,7 +186,7 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
         }, 300);
       });
     }
-  }, [lastCommand, beginRecognition]);
+  }, [error, beginRecognition]);
 
   useEffect(() => {
     return () => {
@@ -200,9 +207,7 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     error,
     startListening,
     stopListening,
-    clearRecognizedText,
+    clearLastCommand,
     isSupported,
   };
 };
-
-export { speakFeedback };
