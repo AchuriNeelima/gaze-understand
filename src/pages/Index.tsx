@@ -1,17 +1,16 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
-import { Save, Camera } from 'lucide-react';
+import { Camera } from 'lucide-react';
 import { HeroSection, FeaturePills } from '@/components/HeroSection';
 import { VoiceCamera } from '@/components/VoiceCamera';
 import { CaptionDisplay } from '@/components/CaptionDisplay';
 import { AccessibilityInfo } from '@/components/AccessibilityInfo';
 import { LanguageSelector } from '@/components/LanguageSelector';
 import { VoiceSelector, VOICE_OPTIONS } from '@/components/VoiceSelector';
-import { VoiceCommandButton } from '@/components/VoiceCommandButton';
+import { VoiceStatusIndicator } from '@/components/VoiceStatusIndicator';
 import { SafetyAlerts } from '@/components/SafetyAlerts';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { useImageCaption } from '@/hooks/useImageCaption';
-
 import { useVoiceRecognition, speakFeedback } from '@/hooks/useVoiceRecognition';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
@@ -25,16 +24,29 @@ const Index = () => {
 
   const { speak, stop, isSpeaking, isSupported: ttsSupported, setLanguage } = useTextToSpeech(selectedLanguage);
   const { caption, translatedCaption, safetyAlerts, isLoading, generateCaption, clearCaption } = useImageCaption();
-  
+
   const {
     isListening,
+    mode,
     lastCommand,
     error: voiceError,
-    startListening,
+    startPassiveListening,
     stopListening,
     clearLastCommand,
     isSupported: voiceSupported,
   } = useVoiceRecognition();
+
+  // Auto-start passive listening on mount
+  useEffect(() => {
+    if (voiceSupported) {
+      // Small delay to let the page render first
+      const timer = setTimeout(() => {
+        startPassiveListening();
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceSupported]);
 
   // Handle voice commands
   useEffect(() => {
@@ -46,30 +58,26 @@ const Index = () => {
           await speakFeedback('Camera is already open. Say capture to take a photo.');
         } else {
           toast({ title: '🎤 Voice Command', description: 'Opening camera...' });
-          await speakFeedback('Opening camera. Say capture or click image when ready.');
+          await speakFeedback('Camera opened. Say capture to take a photo.');
           setIsCameraOpen(true);
         }
         clearLastCommand();
-        // Auto-listen for capture command after camera opens
-        setTimeout(() => {
-          startListening('Camera is open. Say capture, click image, or take photo.');
-        }, 1500);
       } else if (lastCommand === 'capture') {
         if (isCameraOpen) {
           toast({ title: '🎤 Voice Command', description: 'Capturing image...' });
-          await speakFeedback('Capturing image.');
+          await speakFeedback('Image captured. Generating caption.');
           setTriggerCapture(true);
         } else {
-          await speakFeedback('Camera is not open. Say open camera first.');
+          await speakFeedback('Camera is not open. Say open the camera first.');
         }
         clearLastCommand();
       }
     };
 
     handle();
-  }, [lastCommand, isCameraOpen, clearLastCommand, startListening]);
+  }, [lastCommand, isCameraOpen, clearLastCommand]);
 
-  // Show voice errors
+  // Show voice errors as toasts
   useEffect(() => {
     if (voiceError) {
       toast({ title: 'Voice Recognition', description: voiceError, variant: 'destructive' });
@@ -80,7 +88,6 @@ const Index = () => {
     setCurrentImage(imageData);
     setIsCameraOpen(false);
     stop();
-    await speakFeedback('Image captured. Generating caption, please wait.');
     await generateCaption(imageData, selectedLanguage);
   }, [generateCaption, stop, selectedLanguage]);
 
@@ -89,16 +96,12 @@ const Index = () => {
   }, []);
 
   const handleVoiceToggle = useCallback(() => {
-    if (isListening) {
+    if (mode !== 'off') {
       stopListening();
     } else {
-      if (isCameraOpen) {
-        startListening('Say capture, click image, or take photo.');
-      } else {
-        startListening('Say open camera to begin.');
-      }
+      startPassiveListening();
     }
-  }, [isListening, isCameraOpen, startListening, stopListening]);
+  }, [mode, startPassiveListening, stopListening]);
 
   const handleSpeak = useCallback(() => {
     const textToSpeak = translatedCaption || caption;
@@ -110,7 +113,6 @@ const Index = () => {
       }
     }
   }, [caption, translatedCaption, safetyAlerts, speak, selectedLanguage, selectedVoice]);
-
 
   const handleLanguageChange = useCallback(async (newLanguage: string) => {
     setSelectedLanguage(newLanguage);
@@ -124,22 +126,33 @@ const Index = () => {
     setCurrentImage(null);
     clearCaption();
     stop();
-  }, [clearCaption, stop]);
+    // Return to passive listening after completing the flow
+    if (voiceSupported) {
+      startPassiveListening();
+    }
+  }, [clearCaption, stop, voiceSupported, startPassiveListening]);
 
-  // Auto-read caption when generated
+  // Auto-read caption when generated, then return to passive listening
   useEffect(() => {
     if (caption && ttsSupported && !isLoading) {
       const textToSpeak = translatedCaption || caption;
       const timer = setTimeout(() => {
-        if (safetyAlerts.length > 0) {
-          speak(`Warning! ${safetyAlerts.join('. ')}. ${textToSpeak}`, selectedLanguage, selectedVoice);
-        } else {
-          speak(textToSpeak, selectedLanguage, selectedVoice);
+        const fullText = safetyAlerts.length > 0
+          ? `Warning! ${safetyAlerts.join('. ')}. ${textToSpeak}`
+          : textToSpeak;
+        speak(fullText, selectedLanguage, selectedVoice);
+
+        // Return to passive listening after caption is read
+        if (voiceSupported) {
+          setTimeout(() => {
+            startPassiveListening();
+          }, 3000);
         }
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [caption, translatedCaption, safetyAlerts, ttsSupported, isLoading, speak, selectedLanguage, selectedVoice]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caption, translatedCaption, safetyAlerts, ttsSupported, isLoading]);
 
   return (
     <>
@@ -162,7 +175,12 @@ const Index = () => {
             <div className="flex flex-wrap items-center gap-2">
               <LanguageSelector selectedLanguage={selectedLanguage} onLanguageChange={handleLanguageChange} />
               <VoiceSelector selectedVoice={selectedVoice} onVoiceChange={setSelectedVoice} />
-              <VoiceCommandButton isListening={isListening} onToggle={handleVoiceToggle} isSupported={voiceSupported} />
+              <VoiceStatusIndicator
+                mode={mode}
+                isListening={isListening}
+                onToggle={handleVoiceToggle}
+                isSupported={voiceSupported}
+              />
             </div>
           </div>
 
@@ -173,8 +191,8 @@ const Index = () => {
           {!currentImage && !isCameraOpen && (
             <div className="text-center mt-8 mb-8 space-y-6">
               <p className="text-accessible-lg text-muted-foreground max-w-2xl mx-auto">
-                Tap the <strong>Voice</strong> button and say <strong>"Open Camera"</strong>, or use the button below.
-                Then say <strong>"Capture"</strong> or tap the camera button to take a photo.
+                Say <strong>"Hi Buddy"</strong> to activate voice commands, then say <strong>"Open the Camera"</strong>.
+                Or use the button below. Then say <strong>"Capture"</strong> or tap the camera button.
               </p>
               <Button variant="hero" size="xl" onClick={() => setIsCameraOpen(true)} aria-label="Open camera manually">
                 <Camera className="h-6 w-6 mr-2" />
@@ -237,7 +255,7 @@ const Index = () => {
               Powered by AI vision technology. Designed with accessibility in mind.
             </p>
             <p className="text-muted-foreground text-xs mt-2">
-              Voice-controlled camera | Multiple languages | Safety detection
+              Wake word: "Hi Buddy" | Voice-controlled camera | Multiple languages
             </p>
           </footer>
         </main>
