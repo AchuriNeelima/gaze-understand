@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
-import { Link } from 'react-router-dom';
-import { History, Save, Camera } from 'lucide-react';
+import { Save, Camera } from 'lucide-react';
 import { HeroSection, FeaturePills } from '@/components/HeroSection';
 import { VoiceCamera } from '@/components/VoiceCamera';
 import { CaptionDisplay } from '@/components/CaptionDisplay';
@@ -12,7 +11,7 @@ import { VoiceCommandButton } from '@/components/VoiceCommandButton';
 import { SafetyAlerts } from '@/components/SafetyAlerts';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { useImageCaption } from '@/hooks/useImageCaption';
-import { useCaptionHistory } from '@/hooks/useCaptionHistory';
+
 import { useVoiceRecognition, speakFeedback } from '@/hooks/useVoiceRecognition';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
@@ -26,7 +25,7 @@ const Index = () => {
 
   const { speak, stop, isSpeaking, isSupported: ttsSupported, setLanguage } = useTextToSpeech(selectedLanguage);
   const { caption, translatedCaption, safetyAlerts, isLoading, generateCaption, clearCaption } = useImageCaption();
-  const { addToHistory } = useCaptionHistory();
+  
   const {
     isListening,
     lastCommand,
@@ -112,18 +111,6 @@ const Index = () => {
     }
   }, [caption, translatedCaption, safetyAlerts, speak, selectedLanguage, selectedVoice]);
 
-  const handleSave = useCallback(() => {
-    if (currentImage && caption) {
-      addToHistory({
-        imageData: currentImage,
-        caption,
-        translatedCaption: translatedCaption || undefined,
-        language: selectedLanguage,
-        safetyAlerts: safetyAlerts.length > 0 ? safetyAlerts : undefined,
-      });
-      toast({ title: 'Saved to History', description: 'Caption saved successfully.' });
-    }
-  }, [currentImage, caption, translatedCaption, selectedLanguage, safetyAlerts, addToHistory]);
 
   const handleLanguageChange = useCallback(async (newLanguage: string) => {
     setSelectedLanguage(newLanguage);
@@ -176,12 +163,6 @@ const Index = () => {
               <LanguageSelector selectedLanguage={selectedLanguage} onLanguageChange={handleLanguageChange} />
               <VoiceSelector selectedVoice={selectedVoice} onVoiceChange={setSelectedVoice} />
               <VoiceCommandButton isListening={isListening} onToggle={handleVoiceToggle} isSupported={voiceSupported} />
-              <Link to="/history">
-                <Button variant="outline" size="lg" aria-label="View caption history">
-                  <History className="h-5 w-5 mr-2" />
-                  History
-                </Button>
-              </Link>
             </div>
           </div>
 
@@ -242,10 +223,6 @@ const Index = () => {
             {/* Action buttons after caption */}
             {caption && !isLoading && (
               <div className="flex flex-wrap justify-center gap-4">
-                <Button variant="secondary" size="lg" onClick={handleSave} aria-label="Save caption to history">
-                  <Save className="h-5 w-5 mr-2" />
-                  Save to History
-                </Button>
                 <Button variant="outline" size="lg" onClick={handleNewCapture} aria-label="Take a new photo">
                   New Capture
                 </Button>
