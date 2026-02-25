@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import { Link } from 'react-router-dom';
-import { History, Save } from 'lucide-react';
+import { History, Save, Camera } from 'lucide-react';
 import { HeroSection, FeaturePills } from '@/components/HeroSection';
 import { VoiceCamera } from '@/components/VoiceCamera';
 import { CaptionDisplay } from '@/components/CaptionDisplay';
@@ -188,13 +188,17 @@ const Index = () => {
           {/* Feature Pills */}
           {!currentImage && !isCameraOpen && <FeaturePills />}
 
-          {/* Intro text */}
+          {/* Intro text & manual capture button */}
           {!currentImage && !isCameraOpen && (
-            <div className="text-center mt-8 mb-8">
+            <div className="text-center mt-8 mb-8 space-y-6">
               <p className="text-accessible-lg text-muted-foreground max-w-2xl mx-auto">
-                Tap the <strong>Voice</strong> button and say <strong>"Open Camera"</strong> to begin.
-                Then say <strong>"Capture"</strong> to take a photo and hear an AI-generated description.
+                Tap the <strong>Voice</strong> button and say <strong>"Open Camera"</strong>, or use the button below.
+                Then say <strong>"Capture"</strong> or tap the camera button to take a photo.
               </p>
+              <Button variant="hero" size="xl" onClick={() => setIsCameraOpen(true)} aria-label="Open camera manually">
+                <Camera className="h-6 w-6 mr-2" />
+                Open Camera
+              </Button>
             </div>
           )}
 
