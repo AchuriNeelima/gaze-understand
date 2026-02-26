@@ -108,7 +108,7 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
         setMode('passive');
         modeRef.current = 'passive';
       }
-    }, 7000);
+    }, 8000);
   }, [clearActiveWindowTimer]);
 
   const clearLastCommand = useCallback(() => {
@@ -163,16 +163,24 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
       const lastIdx = event.results.length - 1;
       const transcript = event.results[lastIdx][0].transcript.trim();
       console.log('Recognized:', transcript);
+      console.log('Heard:', transcript);
+      console.log('Active Mode:', modeRef.current === 'active');
       setRecognizedText(transcript);
 
       if (modeRef.current === 'passive') {
         if (WAKE_PHRASE.test(transcript)) {
           setMode('active');
           modeRef.current = 'active';
-          setActiveWindow();
-          void speakFeedback("Yes, I'm listening. Please say a command.");
+          void speakFeedback("Yes, I'm listening. Please say a command.").then(() => {
+            if (!stoppedManuallyRef.current && modeRef.current === 'active') {
+              setActiveWindow();
+            }
+          });
         }
       } else if (modeRef.current === 'active') {
+        // Keep active mode alive while user is speaking in the active window
+        setActiveWindow();
+
         const command = matchCommand(transcript);
         if (command) {
           setLastCommand(command);
