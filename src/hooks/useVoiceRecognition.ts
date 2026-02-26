@@ -23,23 +23,30 @@ interface UseVoiceRecognitionReturn {
 
 const WAKE_PHRASE = /hi\s*buddy/i;
 
-const COMMAND_MAP: { patterns: RegExp[]; command: VoiceCommand }[] = [
-  {
-    patterns: [/open\s*(the)?\s*camera/i, /start\s*camera/i],
-    command: 'open_camera',
-  },
-  {
-    patterns: [/capture/i, /click\s*image/i, /take\s*photo/i, /take\s*picture/i, /snap/i, /shoot/i],
-    command: 'capture',
-  },
-];
+const CAMERA_OPEN_KEYWORDS = ['open', 'start', 'launch', 'activate', 'turn on', 'switch on'];
+const CAMERA_NOUNS = ['camera', 'cam'];
+const CAPTURE_VERBS = ['capture', 'click', 'take', 'snap', 'shoot', 'grab', 'get'];
+const CAPTURE_NOUNS = ['photo', 'picture', 'image', 'pic', 'snapshot', 'shot'];
+
+function normalize(text: string): string {
+  return text.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+}
 
 function matchCommand(text: string): VoiceCommand | null {
-  for (const { patterns, command } of COMMAND_MAP) {
-    for (const pattern of patterns) {
-      if (pattern.test(text)) return command;
-    }
-  }
+  const norm = normalize(text);
+
+  // Check CAMERA_OPEN: any open-keyword + any camera-noun, OR just "open camera" style
+  const hasCameraOpenVerb = CAMERA_OPEN_KEYWORDS.some(k => norm.includes(k));
+  const hasCameraNoun = CAMERA_NOUNS.some(k => norm.includes(k));
+  if (hasCameraOpenVerb && hasCameraNoun) return 'open_camera';
+
+  // Check CAPTURE: capture-verb + capture-noun, or just "capture" alone
+  const hasCaptureVerb = CAPTURE_VERBS.some(k => norm.includes(k));
+  const hasCaptureNoun = CAPTURE_NOUNS.some(k => norm.includes(k));
+  if (hasCaptureVerb && hasCaptureNoun) return 'capture';
+  // Single keyword triggers: "capture" or "snap" alone should work
+  if (norm.includes('capture') || norm.includes('snap') || norm.includes('shoot')) return 'capture';
+
   return null;
 }
 
