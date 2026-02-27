@@ -15,12 +15,15 @@ import { useVoiceRecognition, speakFeedback } from '@/hooks/useVoiceRecognition'
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 
+type AssistantState = 'passive' | 'camera_open' | 'processing';
+
 const Index = () => {
   const [currentImage, setCurrentImage] = useState<string | null>(null);
   const [selectedLanguage, setSelectedLanguage] = useState('en');
   const [selectedVoice, setSelectedVoice] = useState(VOICE_OPTIONS[0].id);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [triggerCapture, setTriggerCapture] = useState(false);
+  const [assistantState, setAssistantState] = useState<AssistantState>('passive');
 
   const { speak, stop, isSpeaking, isSupported: ttsSupported, setLanguage } = useTextToSpeech(selectedLanguage);
   const { caption, translatedCaption, safetyAlerts, isLoading, generateCaption, clearCaption } = useImageCaption();
@@ -33,6 +36,7 @@ const Index = () => {
     startPassiveListening,
     stopListening,
     clearLastCommand,
+    returnToPassive,
     isSupported: voiceSupported,
   } = useVoiceRecognition();
 
@@ -61,11 +65,13 @@ const Index = () => {
           await speakFeedback('Camera opened. Say capture to take a photo.');
           setIsCameraOpen(true);
         }
+        setAssistantState('camera_open');
         clearLastCommand();
       } else if (lastCommand === 'capture') {
-        if (isCameraOpen) {
+        if (isCameraOpen || assistantState === 'camera_open') {
           toast({ title: '🎤 Voice Command', description: 'Capturing image...' });
           await speakFeedback('Image captured. Generating caption.');
+          setAssistantState('processing');
           setTriggerCapture(true);
         } else {
           await speakFeedback('Camera is not open. Say open the camera first.');
@@ -75,7 +81,7 @@ const Index = () => {
     };
 
     handle();
-  }, [lastCommand, isCameraOpen, clearLastCommand]);
+  }, [lastCommand, isCameraOpen, assistantState, clearLastCommand]);
 
   // Show voice errors as toasts
   useEffect(() => {
@@ -87,6 +93,7 @@ const Index = () => {
   const handleCapturedImage = useCallback(async (imageData: string) => {
     setCurrentImage(imageData);
     setIsCameraOpen(false);
+    setAssistantState('processing');
     stop();
     await generateCaption(imageData, selectedLanguage);
   }, [generateCaption, stop, selectedLanguage]);
@@ -126,11 +133,12 @@ const Index = () => {
     setCurrentImage(null);
     clearCaption();
     stop();
+    setAssistantState('passive');
     // Return to passive listening after completing the flow
     if (voiceSupported) {
-      startPassiveListening();
+      returnToPassive();
     }
-  }, [clearCaption, stop, voiceSupported, startPassiveListening]);
+  }, [clearCaption, stop, voiceSupported, returnToPassive]);
 
   // Auto-read caption when generated, then return to passive listening
   useEffect(() => {
@@ -142,17 +150,24 @@ const Index = () => {
           : textToSpeak;
         speak(fullText, selectedLanguage, selectedVoice);
 
-        // Return to passive listening after caption is read
-        if (voiceSupported) {
+        if (assistantState === 'processing' && voiceSupported) {
           setTimeout(() => {
-            startPassiveListening();
+            setAssistantState('passive');
+            returnToPassive();
           }, 3000);
         }
       }, 500);
       return () => clearTimeout(timer);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caption, translatedCaption, safetyAlerts, ttsSupported, isLoading]);
+  }, [caption, translatedCaption, safetyAlerts, ttsSupported, isLoading, assistantState, voiceSupported, returnToPassive]);
+
+  useEffect(() => {
+    if (assistantState === 'processing' && caption && !isLoading && !ttsSupported && voiceSupported) {
+      setAssistantState('passive');
+      returnToPassive();
+    }
+  }, [assistantState, caption, isLoading, ttsSupported, voiceSupported, returnToPassive]);
 
   return (
     <>

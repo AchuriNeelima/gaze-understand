@@ -18,6 +18,7 @@ interface UseVoiceRecognitionReturn {
   startPassiveListening: () => void;
   stopListening: () => void;
   clearLastCommand: () => void;
+  returnToPassive: () => void;
   isSupported: boolean;
 }
 
@@ -115,12 +116,7 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     setLastCommand(null);
     setRecognizedText(null);
     setError(null);
-    if (!stoppedManuallyRef.current && modeRef.current === 'active') {
-      clearActiveWindowTimer();
-      setMode('passive');
-      modeRef.current = 'passive';
-    }
-  }, [clearActiveWindowTimer]);
+  }, []);
 
   const destroyRecognition = useCallback(() => {
     if (restartTimerRef.current) {
@@ -282,12 +278,6 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     }, 1000);
   }, [SpeechRecognitionAPI, destroyRecognition, createRecognition]);
 
-  // When a command is processed and cleared, return to passive
-  useEffect(() => {
-    // If lastCommand was just cleared (null) and mode is active, return to passive after short delay
-    // This is triggered by the consumer calling clearLastCommand after handling a command
-  }, [lastCommand]);
-
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -306,6 +296,7 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     startPassiveListening,
     stopListening,
     clearLastCommand,
+    returnToPassive,
     isSupported,
   };
 };
