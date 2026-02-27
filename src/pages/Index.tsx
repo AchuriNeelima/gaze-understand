@@ -37,6 +37,7 @@ const Index = () => {
     stopListening,
     clearLastCommand,
     returnToPassive,
+    keepActive,
     isSupported: voiceSupported,
   } = useVoiceRecognition();
 
@@ -62,10 +63,12 @@ const Index = () => {
           await speakFeedback('Camera is already open. Say capture to take a photo.');
         } else {
           toast({ title: '🎤 Voice Command', description: 'Opening camera...' });
-          await speakFeedback('Camera opened. Say capture to take a photo.');
           setIsCameraOpen(true);
+          await speakFeedback('Camera opened. Say capture to take a photo.');
         }
         setAssistantState('camera_open');
+        // Keep voice active so "capture" command can be heard
+        keepActive();
         clearLastCommand();
       } else if (lastCommand === 'capture') {
         if (isCameraOpen || assistantState === 'camera_open') {
@@ -81,7 +84,7 @@ const Index = () => {
     };
 
     handle();
-  }, [lastCommand, isCameraOpen, assistantState, clearLastCommand]);
+  }, [lastCommand, isCameraOpen, assistantState, clearLastCommand, keepActive]);
 
   // Show voice errors as toasts
   useEffect(() => {
@@ -209,7 +212,7 @@ const Index = () => {
                 Say <strong>"Hi Buddy"</strong> to activate voice commands, then say <strong>"Open the Camera"</strong>.
                 Or use the button below. Then say <strong>"Capture"</strong> or tap the camera button.
               </p>
-              <Button variant="hero" size="xl" onClick={() => setIsCameraOpen(true)} aria-label="Open camera manually">
+              <Button variant="hero" size="xl" onClick={() => { setIsCameraOpen(true); setAssistantState('camera_open'); if (voiceSupported) keepActive(); }} aria-label="Open camera manually">
                 <Camera className="h-6 w-6 mr-2" />
                 Open Camera
               </Button>

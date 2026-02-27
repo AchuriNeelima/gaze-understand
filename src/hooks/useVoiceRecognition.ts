@@ -19,6 +19,7 @@ interface UseVoiceRecognitionReturn {
   stopListening: () => void;
   clearLastCommand: () => void;
   returnToPassive: () => void;
+  keepActive: () => void;
   isSupported: boolean;
 }
 
@@ -280,6 +281,21 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     }, 1000);
   }, [SpeechRecognitionAPI, destroyRecognition, createRecognition]);
 
+  /** Force active mode and keep it on indefinitely (no auto-timeout) */
+  const keepActive = useCallback(() => {
+    if (!SpeechRecognitionAPI || stoppedManuallyRef.current) return;
+    clearActiveWindowTimer();
+    if (modeRef.current !== 'active') {
+      setMode('active');
+      modeRef.current = 'active';
+      // Restart recognition in active mode if not already running
+      if (!recognitionRef.current) {
+        createRecognition('active');
+      }
+    }
+    console.log('keepActive: mode forced to active');
+  }, [SpeechRecognitionAPI, clearActiveWindowTimer, createRecognition]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -299,6 +315,7 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     stopListening,
     clearLastCommand,
     returnToPassive,
+    keepActive,
     isSupported,
   };
 };
