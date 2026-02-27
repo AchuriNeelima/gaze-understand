@@ -174,17 +174,19 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
           });
         }
       } else if (modeRef.current === 'active') {
-        // Keep active mode alive while user is speaking in the active window
-        setActiveWindow();
-
         const command = matchCommand(transcript);
         if (command) {
+          // Command matched — cancel the auto-timeout so mode stays active
+          // until the consumer explicitly calls returnToPassive()
+          clearActiveWindowTimer();
           setLastCommand(command);
           setError(null);
         } else if (WAKE_PHRASE.test(transcript)) {
           setActiveWindow();
           void speakFeedback('I am already listening. Please say a command.');
         } else {
+          // Unrecognised speech — keep the window alive
+          setActiveWindow();
           setError('Command not recognised. Please try again.');
           void speakFeedback('Command not recognised. Please try again.');
         }
