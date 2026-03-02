@@ -60,14 +60,13 @@ export const VoiceCamera: React.FC<VoiceCameraProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  const doCapture = useCallback(() => {
-    if (!videoRef.current || !canvasRef.current) return;
+  const doCapture = useCallback((): boolean => {
+    if (!videoRef.current || !canvasRef.current) return false;
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
     if (video.videoWidth === 0 || video.videoHeight === 0) {
-      toast({ title: 'Error', description: 'Camera still loading. Please wait.', variant: 'destructive' });
-      return;
+      return false;
     }
 
     canvas.width = video.videoWidth;
@@ -79,17 +78,30 @@ export const VoiceCamera: React.FC<VoiceCameraProps> = ({
       if (imageData && imageData.length > 100 && imageData.startsWith('data:image/')) {
         stopCamera();
         onCapture(imageData);
-      } else {
-        toast({ title: 'Error', description: 'Failed to capture photo.', variant: 'destructive' });
+        return true;
       }
+      toast({ title: 'Error', description: 'Failed to capture photo.', variant: 'destructive' });
     }
+
+    return false;
   }, [stopCamera, onCapture]);
 
   // Handle voice-triggered capture
   useEffect(() => {
     if (triggerCapture && isCameraReady) {
-      doCapture();
-      onCaptureHandled();
+      if (doCapture()) {
+        onCaptureHandled();
+        return;
+      }
+
+      const retryInterval = setInterval(() => {
+        if (doCapture()) {
+          onCaptureHandled();
+          clearInterval(retryInterval);
+        }
+      }, 200);
+
+      return () => clearInterval(retryInterval);
     }
   }, [triggerCapture, isCameraReady, doCapture, onCaptureHandled]);
 
