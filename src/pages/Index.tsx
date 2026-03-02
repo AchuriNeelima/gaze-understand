@@ -11,7 +11,8 @@ import { VoiceStatusIndicator } from '@/components/VoiceStatusIndicator';
 import { SafetyAlerts } from '@/components/SafetyAlerts';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { useImageCaption } from '@/hooks/useImageCaption';
-import { useVoiceRecognition, speakFeedback } from '@/hooks/useVoiceRecognition';
+import { useVoiceRecognition } from '@/hooks/useVoiceRecognition';
+import { speakFeedback, getFeedback } from '@/utils/voiceLanguages';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 
@@ -32,6 +33,7 @@ const Index = () => {
     isListening,
     mode,
     lastCommand,
+    detectedLanguage,
     error: voiceError,
     startPassiveListening,
     stopListening,
@@ -39,12 +41,19 @@ const Index = () => {
     returnToPassive,
     keepActive,
     isSupported: voiceSupported,
-  } = useVoiceRecognition();
+  } = useVoiceRecognition(selectedLanguage);
+
+  // Sync detected language back to selected language
+  useEffect(() => {
+    if (detectedLanguage && detectedLanguage !== selectedLanguage) {
+      setSelectedLanguage(detectedLanguage);
+      setLanguage(detectedLanguage);
+    }
+  }, [detectedLanguage, selectedLanguage, setLanguage]);
 
   // Auto-start passive listening on mount
   useEffect(() => {
     if (voiceSupported) {
-      // Small delay to let the page render first
       const timer = setTimeout(() => {
         startPassiveListening();
       }, 1500);
@@ -57,17 +66,19 @@ const Index = () => {
   useEffect(() => {
     if (!lastCommand) return;
 
+    // Use detected language for feedback
+    const lang = detectedLanguage || selectedLanguage;
+
     const handle = async () => {
       if (lastCommand === 'open_camera') {
         if (isCameraOpen) {
-          await speakFeedback('Camera is already open. Say capture to take a photo.');
+          await speakFeedback(getFeedback(lang, 'cameraAlreadyOpen'), lang);
         } else {
           toast({ title: '🎤 Voice Command', description: 'Opening camera...' });
           setIsCameraOpen(true);
-          await speakFeedback('Camera opened. Say capture to take a photo.');
+          await speakFeedback(getFeedback(lang, 'cameraOpened'), lang);
         }
         setAssistantState('camera_open');
-        // Keep voice active so "capture" command can be heard
         keepActive();
         clearLastCommand();
       } else if (lastCommand === 'capture') {
@@ -75,16 +86,16 @@ const Index = () => {
           toast({ title: '🎤 Voice Command', description: 'Capturing image...' });
           setAssistantState('processing');
           setTriggerCapture(true);
-          void speakFeedback('Capturing image. Generating caption.');
+          void speakFeedback(getFeedback(lang, 'capturing'), lang);
         } else {
-          await speakFeedback('Camera is not open. Say open the camera first.');
+          await speakFeedback(getFeedback(lang, 'cameraNotOpen'), lang);
         }
         clearLastCommand();
       }
     };
 
     handle();
-  }, [lastCommand, isCameraOpen, assistantState, clearLastCommand, keepActive]);
+  }, [lastCommand, isCameraOpen, assistantState, clearLastCommand, keepActive, detectedLanguage, selectedLanguage]);
 
   // Show voice errors as toasts
   useEffect(() => {
@@ -98,6 +109,7 @@ const Index = () => {
     setIsCameraOpen(false);
     setAssistantState('processing');
     stop();
+    // Generate caption using the active language
     await generateCaption(imageData, selectedLanguage);
   }, [generateCaption, stop, selectedLanguage]);
 
@@ -137,7 +149,6 @@ const Index = () => {
     clearCaption();
     stop();
     setAssistantState('passive');
-    // Return to passive listening after completing the flow
     if (voiceSupported) {
       returnToPassive();
     }
@@ -171,6 +182,32 @@ const Index = () => {
       returnToPassive();
     }
   }, [assistantState, caption, isLoading, ttsSupported, voiceSupported, returnToPassive]);
+
+  // Multilingual instruction text
+  const getInstructionText = () => {
+    if (selectedLanguage === 'hi') {
+      return (
+        <p className="text-accessible-lg text-muted-foreground max-w-2xl mx-auto">
+          वॉइस कमांड सक्रिय करने के लिए <strong>"हाय दोस्त"</strong> बोलें, फिर <strong>"कैमरा खोलो"</strong> बोलें।
+          या नीचे बटन दबाएं। फिर <strong>"फोटो खींचो"</strong> बोलें या कैमरा बटन दबाएं।
+        </p>
+      );
+    }
+    if (selectedLanguage === 'te') {
+      return (
+        <p className="text-accessible-lg text-muted-foreground max-w-2xl mx-auto">
+          వాయిస్ కమాండ్‌లను సక్రియం చేయడానికి <strong>"హాయ్ బడ్డి"</strong> అని చెప్పండి, తర్వాత <strong>"కెమెరా ఓపెన్ చేయి"</strong> అని చెప్పండి।
+          లేదా కింద బటన్ నొక్కండి. తర్వాత <strong>"ఫోటో తీయి"</strong> అని చెప్పండి లేదా కెమెరా బటన్ నొక్కండి.
+        </p>
+      );
+    }
+    return (
+      <p className="text-accessible-lg text-muted-foreground max-w-2xl mx-auto">
+        Say <strong>"Hi Buddy"</strong> to activate voice commands, then say <strong>"Open the Camera"</strong>.
+        Or use the button below. Then say <strong>"Capture"</strong> or tap the camera button.
+      </p>
+    );
+  };
 
   return (
     <>
@@ -208,10 +245,7 @@ const Index = () => {
           {/* Intro text & manual capture button */}
           {!currentImage && !isCameraOpen && (
             <div className="text-center mt-8 mb-8 space-y-6">
-              <p className="text-accessible-lg text-muted-foreground max-w-2xl mx-auto">
-                Say <strong>"Hi Buddy"</strong> to activate voice commands, then say <strong>"Open the Camera"</strong>.
-                Or use the button below. Then say <strong>"Capture"</strong> or tap the camera button.
-              </p>
+              {getInstructionText()}
               <Button variant="hero" size="xl" onClick={() => { setIsCameraOpen(true); setAssistantState('camera_open'); if (voiceSupported) keepActive(); }} aria-label="Open camera manually">
                 <Camera className="h-6 w-6 mr-2" />
                 Open Camera
@@ -273,7 +307,7 @@ const Index = () => {
               Powered by AI vision technology. Designed with accessibility in mind.
             </p>
             <p className="text-muted-foreground text-xs mt-2">
-              Wake word: "Hi Buddy" | Voice-controlled camera | Multiple languages
+              Wake words: "Hi Buddy" | "हाय दोस्त" | "హాయ్ బడ్డి" | Multilingual voice commands
             </p>
           </footer>
         </main>

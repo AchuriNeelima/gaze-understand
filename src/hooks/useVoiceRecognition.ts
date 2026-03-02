@@ -5,15 +5,28 @@ import type {
   SpeechRecognitionEvent,
   SpeechRecognitionErrorEvent,
 } from '@/types/speech-recognition';
+import {
+  type VoiceCommand,
+  matchWakePhrase,
+  matchMultilingualCommand,
+  detectLanguageFromText,
+  getFeedback,
+  speakFeedback,
+  LANG_TO_RECOGNITION,
+} from '@/utils/voiceLanguages';
 
-export type VoiceCommand = 'open_camera' | 'capture';
 export type VoiceMode = 'passive' | 'active' | 'off';
+
+// Re-export for consumers
+export type { VoiceCommand } from '@/utils/voiceLanguages';
+export { speakFeedback } from '@/utils/voiceLanguages';
 
 interface UseVoiceRecognitionReturn {
   isListening: boolean;
   mode: VoiceMode;
   recognizedText: string | null;
   lastCommand: VoiceCommand | null;
+  detectedLanguage: string; // short code: 'en', 'hi', 'te'
   error: string | null;
   startPassiveListening: () => void;
   stopListening: () => void;
@@ -23,78 +36,38 @@ interface UseVoiceRecognitionReturn {
   isSupported: boolean;
 }
 
-const WAKE_PHRASE = /hi\s*buddy/i;
-
-const CAMERA_OPEN_KEYWORDS = ['open', 'start', 'launch', 'activate', 'turn on', 'switch on'];
-const CAMERA_NOUNS = ['camera', 'cam'];
-const CAPTURE_VERBS = ['capture', 'click', 'take', 'snap', 'shoot', 'grab', 'get'];
-const CAPTURE_NOUNS = ['photo', 'picture', 'image', 'pic', 'snapshot', 'shot'];
-
-function normalize(text: string): string {
-  return text.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
-}
-
-function matchCommand(text: string): VoiceCommand | null {
-  const norm = normalize(text);
-
-  // Check CAMERA_OPEN: any open-keyword + any camera-noun, OR just "open camera" style
-  const hasCameraOpenVerb = CAMERA_OPEN_KEYWORDS.some(k => norm.includes(k));
-  const hasCameraNoun = CAMERA_NOUNS.some(k => norm.includes(k));
-  if (hasCameraOpenVerb && hasCameraNoun) return 'open_camera';
-
-  // Check CAPTURE: capture-verb + capture-noun, or just "capture" alone
-  const hasCaptureVerb = CAPTURE_VERBS.some(k => norm.includes(k));
-  const hasCaptureNoun = CAPTURE_NOUNS.some(k => norm.includes(k));
-  if (hasCaptureVerb && hasCaptureNoun) return 'capture';
-  // Single keyword triggers: "capture" or "snap" alone should work
-  if (norm.includes('capture') || norm.includes('snap') || norm.includes('shoot')) return 'capture';
-
-  return null;
-}
-
-/** Speak text using browser SpeechSynthesis and return a promise that resolves when done */
-export function speakFeedback(text: string): Promise<void> {
-  return new Promise((resolve) => {
-    if (!('speechSynthesis' in window)) {
-      resolve();
-      return;
-    }
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    utterance.onend = () => resolve();
-    utterance.onerror = () => resolve();
-    window.speechSynthesis.speak(utterance);
-  });
-}
-
 function getSpeechRecognitionAPI(): SpeechRecognitionConstructor | null {
   if (typeof window === 'undefined') return null;
   const win = window as unknown as Record<string, unknown>;
   return (win.SpeechRecognition ?? win.webkitSpeechRecognition ?? null) as SpeechRecognitionConstructor | null;
 }
 
-export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
+export const useVoiceRecognition = (preferredLanguage: string = 'en'): UseVoiceRecognitionReturn => {
   const [isListening, setIsListening] = useState(false);
   const [mode, setMode] = useState<VoiceMode>('off');
   const [recognizedText, setRecognizedText] = useState<string | null>(null);
   const [lastCommand, setLastCommand] = useState<VoiceCommand | null>(null);
+  const [detectedLanguage, setDetectedLanguage] = useState<string>(preferredLanguage);
   const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const modeRef = useRef<VoiceMode>('off');
   const stoppedManuallyRef = useRef(false);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeWindowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentLangRef = useRef<string>(preferredLanguage);
 
   const SpeechRecognitionAPI = getSpeechRecognitionAPI();
   const isSupported = !!SpeechRecognitionAPI;
 
-  // Keep modeRef in sync
+  // Keep refs in sync
+  useEffect(() => { modeRef.current = mode; }, [mode]);
+  useEffect(() => { currentLangRef.current = detectedLanguage; }, [detectedLanguage]);
+
+  // Update detected language when preferred language changes externally
   useEffect(() => {
-    modeRef.current = mode;
-  }, [mode]);
+    currentLangRef.current = preferredLanguage;
+    setDetectedLanguage(preferredLanguage);
+  }, [preferredLanguage]);
 
   const clearActiveWindowTimer = useCallback(() => {
     if (activeWindowTimerRef.current) {
@@ -149,7 +122,9 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
 
     recognition.continuous = true;
     recognition.interimResults = false;
-    recognition.lang = 'en-US';
+    // Set language based on current detected/preferred language
+    const langCode = LANG_TO_RECOGNITION[currentLangRef.current] || 'en-US';
+    recognition.lang = langCode;
     recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
@@ -159,57 +134,75 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       const lastIdx = event.results.length - 1;
       const transcript = event.results[lastIdx][0].transcript.trim();
-      console.log('Recognized:', transcript);
-      console.log('Heard:', transcript);
-      console.log('Active Mode:', modeRef.current === 'active');
+      console.log('Recognized:', transcript, '| Mode:', modeRef.current, '| Lang:', currentLangRef.current);
       setRecognizedText(transcript);
 
       if (modeRef.current === 'passive') {
-        if (WAKE_PHRASE.test(transcript)) {
+        const wakeLang = matchWakePhrase(transcript);
+        if (wakeLang) {
+          // Detected wake phrase — switch to that language
+          setDetectedLanguage(wakeLang);
+          currentLangRef.current = wakeLang;
           setMode('active');
           modeRef.current = 'active';
-          void speakFeedback("Yes, I'm listening. Please say a command.").then(() => {
+          const msg = getFeedback(wakeLang, 'listening');
+          void speakFeedback(msg, wakeLang).then(() => {
             if (!stoppedManuallyRef.current && modeRef.current === 'active') {
               setActiveWindow();
             }
           });
+          // Restart recognition with the detected language for better accuracy
+          destroyRecognition();
+          restartTimerRef.current = setTimeout(() => {
+            if (modeRef.current === 'active') {
+              createRecognitionInternal('active');
+            }
+          }, 300);
         }
       } else if (modeRef.current === 'active') {
-        const command = matchCommand(transcript);
-        if (command) {
-          // Command matched — cancel the auto-timeout so mode stays active
-          // until the consumer explicitly calls returnToPassive()
+        const result = matchMultilingualCommand(transcript);
+        if (result) {
           clearActiveWindowTimer();
-          setLastCommand(command);
+          // Update detected language from command
+          setDetectedLanguage(result.lang);
+          currentLangRef.current = result.lang;
+          setLastCommand(result.command);
           setError(null);
-        } else if (WAKE_PHRASE.test(transcript)) {
+        } else if (matchWakePhrase(transcript)) {
+          const lang = currentLangRef.current;
           setActiveWindow();
-          void speakFeedback('I am already listening. Please say a command.');
+          void speakFeedback(getFeedback(lang, 'alreadyListening'), lang);
         } else {
-          // Unrecognised speech — keep the window alive
+          const lang = currentLangRef.current;
+          // Try detecting language from transcript script
+          const scriptLang = detectLanguageFromText(transcript);
+          if (scriptLang !== currentLangRef.current) {
+            setDetectedLanguage(scriptLang);
+            currentLangRef.current = scriptLang;
+          }
           setActiveWindow();
-          setError('Command not recognised. Please try again.');
-          void speakFeedback('Command not recognised. Please try again.');
+          setError(getFeedback(lang, 'notRecognized'));
+          void speakFeedback(getFeedback(lang, 'notRecognized'), lang);
         }
       }
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-        const msg = 'Microphone access denied. Please enable microphone permission.';
+        const lang = currentLangRef.current;
+        const msg = getFeedback(lang, 'micDenied');
         setError(msg);
-        speakFeedback(msg);
+        speakFeedback(msg, lang);
         setMode('off');
         modeRef.current = 'off';
         setIsListening(false);
         return;
       }
 
-      // For transient errors (no-speech, network, aborted), auto-restart if still in a mode
       if (event.error === 'no-speech' || event.error === 'network' || event.error === 'aborted') {
-        // Don't surface no-speech as error in passive mode
         if (modeRef.current === 'active' && event.error === 'no-speech') {
-          setError('No speech detected. Please try again.');
+          const lang = currentLangRef.current;
+          setError(getFeedback(lang, 'noSpeech'));
         }
       }
     };
@@ -222,7 +215,7 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
             try {
               recognition.start();
             } catch {
-              createRecognition(modeRef.current);
+              createRecognitionInternal(modeRef.current as 'passive' | 'active');
             }
           }
         }, 300);
@@ -232,15 +225,17 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     try {
       recognition.start();
     } catch {
-      // Already started or other error, retry after delay
       restartTimerRef.current = setTimeout(() => {
         if (modeRef.current === 'passive' || modeRef.current === 'active') {
-          createRecognition(modeRef.current);
+          createRecognitionInternal(modeRef.current as 'passive' | 'active');
         }
       }, 500);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [SpeechRecognitionAPI, destroyRecognition]);
+
+  // Internal ref to avoid circular dependency
+  const createRecognitionInternal = createRecognition;
 
   const stopListening = useCallback(() => {
     stoppedManuallyRef.current = true;
@@ -252,9 +247,10 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
 
   const startPassiveListening = useCallback(() => {
     if (!SpeechRecognitionAPI) {
-      const msg = 'Voice recognition is not supported in this browser.';
+      const lang = currentLangRef.current;
+      const msg = getFeedback(lang, 'notSupported');
       setError(msg);
-      speakFeedback(msg);
+      speakFeedback(msg, lang);
       return;
     }
 
@@ -268,7 +264,6 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     createRecognition('passive');
   }, [SpeechRecognitionAPI, clearActiveWindowTimer, createRecognition]);
 
-  /** Switch back to passive mode (called after a task completes) */
   const returnToPassive = useCallback(() => {
     if (!SpeechRecognitionAPI || stoppedManuallyRef.current) return;
     setMode('passive');
@@ -281,20 +276,31 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     }, 1000);
   }, [SpeechRecognitionAPI, destroyRecognition, createRecognition]);
 
-  /** Force active mode and keep it on indefinitely (no auto-timeout) */
   const keepActive = useCallback(() => {
     if (!SpeechRecognitionAPI || stoppedManuallyRef.current) return;
     clearActiveWindowTimer();
     if (modeRef.current !== 'active') {
       setMode('active');
       modeRef.current = 'active';
-      // Restart recognition in active mode if not already running
       if (!recognitionRef.current) {
         createRecognition('active');
       }
     }
     console.log('keepActive: mode forced to active');
   }, [SpeechRecognitionAPI, clearActiveWindowTimer, createRecognition]);
+
+  // Restart recognition when preferred language changes to pick up new lang
+  useEffect(() => {
+    if (modeRef.current !== 'off' && !stoppedManuallyRef.current) {
+      destroyRecognition();
+      restartTimerRef.current = setTimeout(() => {
+        if (modeRef.current !== 'off') {
+          createRecognition(modeRef.current as 'passive' | 'active');
+        }
+      }, 300);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preferredLanguage]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -310,6 +316,7 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     mode,
     recognizedText,
     lastCommand,
+    detectedLanguage,
     error,
     startPassiveListening,
     stopListening,
