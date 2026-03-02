@@ -73,9 +73,9 @@ const Index = () => {
       } else if (lastCommand === 'capture') {
         if (isCameraOpen || assistantState === 'camera_open') {
           toast({ title: '🎤 Voice Command', description: 'Capturing image...' });
-          await speakFeedback('Image captured. Generating caption.');
           setAssistantState('processing');
           setTriggerCapture(true);
+          void speakFeedback('Capturing image. Generating caption.');
         } else {
           await speakFeedback('Camera is not open. Say open the camera first.');
         }
