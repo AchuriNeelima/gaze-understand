@@ -1,0 +1,192 @@
+/**
+ * Multilingual voice command utilities
+ * Supports: English, Hindi, Telugu (extensible to more)
+ */
+
+export type VoiceCommand = 'open_camera' | 'capture';
+
+// Map short language codes to speech recognition locale codes
+export const LANG_TO_RECOGNITION: Record<string, string> = {
+  en: 'en-US',
+  hi: 'hi-IN',
+  te: 'te-IN',
+};
+
+export const RECOGNITION_TO_LANG: Record<string, string> = {
+  'en-US': 'en',
+  'hi-IN': 'hi',
+  'te-IN': 'te',
+};
+
+// ── Wake phrases ──────────────────────────────────────────────
+export const WAKE_PHRASES: Array<{ pattern: RegExp; lang: string }> = [
+  // English
+  { pattern: /hi\s*buddy/i, lang: 'en' },
+  { pattern: /hello\s*buddy/i, lang: 'en' },
+  { pattern: /hey\s*buddy/i, lang: 'en' },
+  // Hindi
+  { pattern: /सुनो\s*दोस्त/, lang: 'hi' },
+  { pattern: /हेलो\s*दोस्त/, lang: 'hi' },
+  { pattern: /हाय\s*दोस्त/, lang: 'hi' },
+  { pattern: /हाय\s*बडी/, lang: 'hi' },
+  { pattern: /हाय\s*बड्डी/, lang: 'hi' },
+  // Telugu
+  { pattern: /హాయ్\s*బడ్డీ/, lang: 'te' },
+  { pattern: /హాయ్\s*బడ్డి/, lang: 'te' },
+  { pattern: /విను\s*బడ్డీ/, lang: 'te' },
+  { pattern: /విను\s*బడ్డి/, lang: 'te' },
+  { pattern: /హలో\s*బడ్డి/, lang: 'te' },
+];
+
+/** Check if text contains a wake phrase. Returns matched language or null. */
+export function matchWakePhrase(text: string): string | null {
+  for (const wp of WAKE_PHRASES) {
+    if (wp.pattern.test(text)) return wp.lang;
+  }
+  return null;
+}
+
+// ── Command keywords per language ─────────────────────────────
+interface CommandKeywords {
+  openCamera: { verbs: string[]; nouns: string[] };
+  capture: { verbs: string[]; nouns: string[]; solo: string[] };
+}
+
+const COMMANDS: Record<string, CommandKeywords> = {
+  en: {
+    openCamera: {
+      verbs: ['open', 'start', 'launch', 'activate', 'turn on', 'switch on'],
+      nouns: ['camera', 'cam'],
+    },
+    capture: {
+      verbs: ['capture', 'click', 'take', 'snap', 'shoot', 'grab', 'get'],
+      nouns: ['photo', 'picture', 'image', 'pic', 'snapshot', 'shot'],
+      solo: ['capture', 'snap', 'shoot'],
+    },
+  },
+  hi: {
+    openCamera: {
+      verbs: ['खोलो', 'खोल', 'चालू', 'शुरू', 'ओपन', 'स्टार्ट'],
+      nouns: ['कैमरा', 'कैमेरा', 'कमरा'],
+    },
+    capture: {
+      verbs: ['खींचो', 'खींच', 'लो', 'लें', 'ले', 'क्लिक', 'कैप्चर', 'तस्वीर'],
+      nouns: ['फोटो', 'तस्वीर', 'फ़ोटो', 'चित्र', 'पिक्चर', 'इमेज'],
+      solo: ['कैप्चर', 'क्लिक', 'खींचो'],
+    },
+  },
+  te: {
+    openCamera: {
+      verbs: ['ఓపెన్', 'తెరువు', 'తెరు', 'ప్రారంభించు', 'స్టార్ట్', 'చేయి'],
+      nouns: ['కెమెరా', 'కేమెరా', 'కామెరా', 'కెమరా'],
+    },
+    capture: {
+      verbs: ['తీయి', 'తీయండి', 'తీసుకో', 'క్లిక్', 'క్యాప్చర్', 'తీయు'],
+      nouns: ['ఫోటో', 'చిత్రం', 'పిక్చర్', 'బొమ్మ', 'ఇమేజ్'],
+      solo: ['క్యాప్చర్', 'క్లిక్', 'తీయి'],
+    },
+  },
+};
+
+function normalize(text: string): string {
+  // Keep Unicode letters (Hindi Devanagari, Telugu, etc.)
+  return text
+    .toLowerCase()
+    .replace(/[^\\p{L}\\p{N}\\s]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Match a command across all supported languages. Returns command + detected lang. */
+export function matchMultilingualCommand(text: string): { command: VoiceCommand; lang: string } | null {
+  const norm = normalize(text);
+
+  for (const [lang, cmds] of Object.entries(COMMANDS)) {
+    // Open camera
+    const hasOpenVerb = cmds.openCamera.verbs.some(k => norm.includes(k.toLowerCase()));
+    const hasCameraNoun = cmds.openCamera.nouns.some(k => norm.includes(k.toLowerCase()));
+    if (hasOpenVerb && hasCameraNoun) return { command: 'open_camera', lang };
+
+    // Capture
+    const hasCaptureVerb = cmds.capture.verbs.some(k => norm.includes(k.toLowerCase()));
+    const hasCaptureNoun = cmds.capture.nouns.some(k => norm.includes(k.toLowerCase()));
+    if (hasCaptureVerb && hasCaptureNoun) return { command: 'capture', lang };
+    if (cmds.capture.solo.some(k => norm.includes(k.toLowerCase()))) return { command: 'capture', lang };
+  }
+
+  return null;
+}
+
+// ── Language detection from script ────────────────────────────
+/** Detect language from Unicode script in text */
+export function detectLanguageFromText(text: string): string {
+  const teluguChars = (text.match(/[\u0C00-\u0C7F]/g) || []).length;
+  const hindiChars = (text.match(/[\u0900-\u097F]/g) || []).length;
+  const latinChars = (text.match(/[a-zA-Z]/g) || []).length;
+
+  if (teluguChars > hindiChars && teluguChars > latinChars) return 'te';
+  if (hindiChars > teluguChars && hindiChars > latinChars) return 'hi';
+  return 'en';
+}
+
+// ── Feedback messages ─────────────────────────────────────────
+const FEEDBACK: Record<string, Record<string, string>> = {
+  en: {
+    listening: "Yes, I'm listening. Please say a command.",
+    alreadyListening: 'I am already listening. Please say a command.',
+    notRecognized: 'Command not recognised. Please try again.',
+    cameraOpened: 'Camera opened. Say capture to take a photo.',
+    cameraAlreadyOpen: 'Camera is already open. Say capture to take a photo.',
+    capturing: 'Capturing image. Generating caption.',
+    cameraNotOpen: 'Camera is not open. Say open the camera first.',
+    micDenied: 'Microphone access denied. Please enable microphone permission.',
+    notSupported: 'Voice recognition is not supported in this browser.',
+    noSpeech: 'No speech detected. Please try again.',
+  },
+  hi: {
+    listening: 'हाँ, मैं सुन रहा हूँ। कृपया कमांड बोलें।',
+    alreadyListening: 'मैं पहले से सुन रहा हूँ। कृपया कमांड बोलें।',
+    notRecognized: 'कमांड समझ नहीं आया। कृपया दोबारा बोलें।',
+    cameraOpened: 'कैमरा खुल गया। फोटो लेने के लिए कैप्चर बोलें।',
+    cameraAlreadyOpen: 'कैमरा पहले से खुला है। फोटो लेने के लिए कैप्चर बोलें।',
+    capturing: 'फोटो ले रहे हैं। कैप्शन बना रहे हैं।',
+    cameraNotOpen: 'कैमरा खुला नहीं है। पहले कैमरा खोलो बोलें।',
+    micDenied: 'माइक्रोफोन की अनुमति नहीं है। कृपया अनुमति दें।',
+    notSupported: 'इस ब्राउज़र में वॉइस रिकग्निशन समर्थित नहीं है।',
+    noSpeech: 'कोई आवाज़ नहीं सुनाई दी। कृपया दोबारा बोलें।',
+  },
+  te: {
+    listening: 'అవును, నేను వింటున్నాను. దయచేసి కమాండ్ చెప్పండి.',
+    alreadyListening: 'నేను ఇప్పటికే వింటున్నాను. దయచేసి కమాండ్ చెప్పండి.',
+    notRecognized: 'కమాండ్ అర్థం కాలేదు. దయచేసి మళ్ళీ ప్రయత్నించండి.',
+    cameraOpened: 'కెమెరా ఓపెన్ అయింది. ఫోటో తీయడానికి క్యాప్చర్ చెప్పండి.',
+    cameraAlreadyOpen: 'కెమెరా ఇప్పటికే ఓపెన్ అయి ఉంది. ఫోటో తీయడానికి క్యాప్చర్ చెప్పండి.',
+    capturing: 'ఫోటో తీస్తున్నాము. కాప్షన్ తయారు చేస్తున్నాము.',
+    cameraNotOpen: 'కెమెరా ఓపెన్ కాలేదు. ముందు కెమెరా ఓపెన్ చేయి అని చెప్పండి.',
+    micDenied: 'మైక్రోఫోన్ అనుమతి లేదు. దయచేసి అనుమతి ఇవ్వండి.',
+    notSupported: 'ఈ బ్రౌజర్‌లో వాయిస్ రికగ్నిషన్ సపోర్ట్ లేదు.',
+    noSpeech: 'మాటలు వినిపించలేదు. దయచేసి మళ్ళీ ప్రయత్నించండి.',
+  },
+};
+
+export function getFeedback(lang: string, key: string): string {
+  return FEEDBACK[lang]?.[key] || FEEDBACK.en[key] || '';
+}
+
+/** Speak text using browser SpeechSynthesis with the correct language */
+export function speakFeedback(text: string, lang: string = 'en'): Promise<void> {
+  return new Promise((resolve) => {
+    if (!('speechSynthesis' in window)) {
+      resolve();
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = LANG_TO_RECOGNITION[lang] || lang;
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.onend = () => resolve();
+    utterance.onerror = () => resolve();
+    window.speechSynthesis.speak(utterance);
+  });
+}
