@@ -92,7 +92,7 @@ function normalize(text: string): string {
   // Keep Unicode letters (Hindi Devanagari, Telugu, etc.)
   return text
     .toLowerCase()
-    .replace(/[^\\p{L}\\p{N}\\s]/gu, '')
+    .replace(/[^\p{L}\p{N}\s]/gu, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
