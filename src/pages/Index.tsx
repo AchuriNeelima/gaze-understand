@@ -187,23 +187,23 @@ const Index = () => {
   const getInstructionText = () => {
     if (selectedLanguage === 'hi') {
       return (
-        <p className="text-accessible-lg text-muted-foreground max-w-2xl mx-auto">
-          वॉइस कमांड सक्रिय करने के लिए <strong>"हाय दोस्त"</strong> बोलें, फिर <strong>"कैमरा खोलो"</strong> बोलें।
+          <p className="text-accessible-lg text-muted-foreground max-w-2xl mx-auto">
+            वॉइस कमांड सक्रिय करने के लिए <strong>"Hello Dost"</strong> या <strong>"सुनो दोस्त"</strong> बोलें, फिर <strong>"कैमरा खोलो"</strong> बोलें।
           या नीचे बटन दबाएं। फिर <strong>"फोटो खींचो"</strong> बोलें या कैमरा बटन दबाएं।
         </p>
       );
     }
     if (selectedLanguage === 'te') {
       return (
-        <p className="text-accessible-lg text-muted-foreground max-w-2xl mx-auto">
-          వాయిస్ కమాండ్‌లను సక్రియం చేయడానికి <strong>"హాయ్ బడ్డి"</strong> అని చెప్పండి, తర్వాత <strong>"కెమెరా ఓపెన్ చేయి"</strong> అని చెప్పండి।
+          <p className="text-accessible-lg text-muted-foreground max-w-2xl mx-auto">
+            వాయిస్ కమాండ్‌లను సక్రియం చేయడానికి <strong>"Hello"</strong> అని చెప్పండి, తర్వాత <strong>"కెమెరా ఓపెన్ చేయి"</strong> అని చెప్పండి.
           లేదా కింద బటన్ నొక్కండి. తర్వాత <strong>"ఫోటో తీయి"</strong> అని చెప్పండి లేదా కెమెరా బటన్ నొక్కండి.
         </p>
       );
     }
     return (
       <p className="text-accessible-lg text-muted-foreground max-w-2xl mx-auto">
-        Say <strong>"Hi Buddy"</strong> to activate voice commands, then say <strong>"Open the Camera"</strong>.
+        Say <strong>"Hey Buddy"</strong> to activate voice commands, then say <strong>"Open the Camera"</strong>.
         Or use the button below. Then say <strong>"Capture"</strong> or tap the camera button.
       </p>
     );
@@ -307,7 +307,7 @@ const Index = () => {
               Powered by AI vision technology. Designed with accessibility in mind.
             </p>
             <p className="text-muted-foreground text-xs mt-2">
-              Wake words: "Hi Buddy" | "हाय दोस्त" | "హాయ్ బడ్డి" | Multilingual voice commands
+              Wake words: "Hey Buddy" | "Hello Dost" / "सुनो दोस्त" | "Hello" (Telugu) | Multilingual voice commands
             </p>
           </footer>
         </main>

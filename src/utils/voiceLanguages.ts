@@ -20,14 +20,18 @@ export const RECOGNITION_TO_LANG: Record<string, string> = {
 
 // ── Wake phrases ──────────────────────────────────────────────
 export const WAKE_PHRASES: Array<{ pattern: RegExp; lang: string }> = [
-  // English
+  // English — must be checked before generic "hello"
   { pattern: /hey\s*buddy/i, lang: 'en' },
 
-  // Hindi (simplified as requested)
+  // Hindi — check multi-word patterns before single-word
   { pattern: /hello\s*dost/i, lang: 'hi' },
+  { pattern: /suno\s*dost/i, lang: 'hi' },
+  { pattern: /सुनो\s*दोस्त/i, lang: 'hi' },
+  { pattern: /हेलो\s*दोस्त/i, lang: 'hi' },
 
-  // Telugu (simplified as requested)
-  { pattern: /hello/i, lang: 'te' },
+  // Telugu — "hello" alone (must be LAST since it's very generic)
+  { pattern: /^hello$/i, lang: 'te' },
+  { pattern: /హలో/i, lang: 'te' },
 ];
 
 /** Check if text contains a wake phrase. Returns matched language or null. */
@@ -92,20 +96,33 @@ function normalize(text: string): string {
 /** Match a command across all supported languages. Returns command + detected lang. */
 export function matchMultilingualCommand(text: string): { command: VoiceCommand; lang: string } | null {
   const norm = normalize(text);
+  console.log('[VoiceCmd] Normalized text:', norm);
 
   for (const [lang, cmds] of Object.entries(COMMANDS)) {
     // Open camera
     const hasOpenVerb = cmds.openCamera.verbs.some(k => norm.includes(k.toLowerCase()));
     const hasCameraNoun = cmds.openCamera.nouns.some(k => norm.includes(k.toLowerCase()));
-    if (hasOpenVerb && hasCameraNoun) return { command: 'open_camera', lang };
+    console.log(`[VoiceCmd] Lang=${lang} openCamera: verb=${hasOpenVerb}, noun=${hasCameraNoun}`);
+    if (hasOpenVerb && hasCameraNoun) {
+      console.log(`[VoiceCmd] MATCHED: open_camera (${lang})`);
+      return { command: 'open_camera', lang };
+    }
 
     // Capture
     const hasCaptureVerb = cmds.capture.verbs.some(k => norm.includes(k.toLowerCase()));
     const hasCaptureNoun = cmds.capture.nouns.some(k => norm.includes(k.toLowerCase()));
-    if (hasCaptureVerb && hasCaptureNoun) return { command: 'capture', lang };
-    if (cmds.capture.solo.some(k => norm.includes(k.toLowerCase()))) return { command: 'capture', lang };
+    const hasSolo = cmds.capture.solo.some(k => norm.includes(k.toLowerCase()));
+    if (hasCaptureVerb && hasCaptureNoun) {
+      console.log(`[VoiceCmd] MATCHED: capture (${lang})`);
+      return { command: 'capture', lang };
+    }
+    if (hasSolo) {
+      console.log(`[VoiceCmd] MATCHED: capture solo (${lang})`);
+      return { command: 'capture', lang };
+    }
   }
 
+  console.log('[VoiceCmd] No command matched');
   return null;
 }
 
