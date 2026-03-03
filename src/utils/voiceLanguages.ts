@@ -21,21 +21,13 @@ export const RECOGNITION_TO_LANG: Record<string, string> = {
 // ── Wake phrases ──────────────────────────────────────────────
 export const WAKE_PHRASES: Array<{ pattern: RegExp; lang: string }> = [
   // English
-  { pattern: /hi\s*buddy/i, lang: 'en' },
-  { pattern: /hello\s*buddy/i, lang: 'en' },
   { pattern: /hey\s*buddy/i, lang: 'en' },
-  // Hindi
-  { pattern: /सुनो\s*दोस्त/, lang: 'hi' },
-  { pattern: /हेलो\s*दोस्त/, lang: 'hi' },
-  { pattern: /हाय\s*दोस्त/, lang: 'hi' },
-  { pattern: /हाय\s*बडी/, lang: 'hi' },
-  { pattern: /हाय\s*बड्डी/, lang: 'hi' },
-  // Telugu
-  { pattern: /హాయ్\s*బడ్డీ/, lang: 'te' },
-  { pattern: /హాయ్\s*బడ్డి/, lang: 'te' },
-  { pattern: /విను\s*బడ్డీ/, lang: 'te' },
-  { pattern: /విను\s*బడ్డి/, lang: 'te' },
-  { pattern: /హలో\s*బడ్డి/, lang: 'te' },
+
+  // Hindi (simplified as requested)
+  { pattern: /hello\s*dost/i, lang: 'hi' },
+
+  // Telugu (simplified as requested)
+  { pattern: /hello/i, lang: 'te' },
 ];
 
 /** Check if text contains a wake phrase. Returns matched language or null. */
