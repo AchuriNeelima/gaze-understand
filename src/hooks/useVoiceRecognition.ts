@@ -83,7 +83,7 @@ export const useVoiceRecognition = (preferredLanguage: string = 'en'): UseVoiceR
         setMode('passive');
         modeRef.current = 'passive';
       }
-    }, 8000);
+    }, 20000); // 20 seconds to give user enough time
   }, [clearActiveWindowTimer]);
 
   const clearLastCommand = useCallback(() => {
@@ -146,11 +146,8 @@ export const useVoiceRecognition = (preferredLanguage: string = 'en'): UseVoiceR
           setMode('active');
           modeRef.current = 'active';
           const msg = getFeedback(wakeLang, 'listening');
-          void speakFeedback(msg, wakeLang).then(() => {
-            if (!stoppedManuallyRef.current && modeRef.current === 'active') {
-              setActiveWindow();
-            }
-          });
+          setActiveWindow(); // Start timer immediately
+          void speakFeedback(msg, wakeLang);
           // Restart recognition with the detected language for better accuracy
           destroyRecognition();
           restartTimerRef.current = setTimeout(() => {
