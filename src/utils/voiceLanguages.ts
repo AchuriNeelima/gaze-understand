@@ -29,8 +29,8 @@ export const WAKE_PHRASES: Array<{ pattern: RegExp; lang: string }> = [
   { pattern: /सुनो\s*दोस्त/i, lang: 'hi' },
   { pattern: /हेलो\s*दोस्त/i, lang: 'hi' },
 
-  // Telugu — "hello" alone (must be LAST since it's very generic)
-  { pattern: /^hello$/i, lang: 'te' },
+  // Telugu — "hello" wake word (kept after Hindi patterns)
+  { pattern: /\bhello\b/i, lang: 'te' },
   { pattern: /హలో/i, lang: 'te' },
 ];
 
@@ -167,7 +167,7 @@ const FEEDBACK: Record<string, Record<string, string>> = {
     noSpeech: 'कोई आवाज़ नहीं सुनाई दी। कृपया दोबारा बोलें।',
   },
   te: {
-    listening: 'అవును, నేను వింటున్నాను. దయచేసి కమాండ్ చెప్పండి.',
+    listening: 'హలో! "కెమెరా ఓపెన్ చేయి" అని చెప్పండి.',
     alreadyListening: 'నేను ఇప్పటికే వింటున్నాను. దయచేసి కమాండ్ చెప్పండి.',
     notRecognized: 'కమాండ్ అర్థం కాలేదు. దయచేసి మళ్ళీ ప్రయత్నించండి.',
     cameraOpened: 'కెమెరా ఓపెన్ అయింది. ఫోటో తీయడానికి క్యాప్చర్ చెప్పండి.',
