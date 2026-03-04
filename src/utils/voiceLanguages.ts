@@ -202,7 +202,25 @@ export function speakFeedback(text: string, lang: string = 'en'): Promise<void> 
     }
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = LANG_TO_RECOGNITION[lang] || lang;
+    const preferredLang = LANG_TO_RECOGNITION[lang] || lang;
+    utterance.lang = preferredLang;
+
+    // Check if a voice exists for the preferred language; fall back to en-US / hi-IN
+    const voices = window.speechSynthesis.getVoices();
+    const hasVoice = voices.some(v => v.lang.startsWith(preferredLang.split('-')[0]));
+    if (!hasVoice && lang === 'te') {
+      // Telugu voice rarely available — fall back to Hindi, then English
+      const hiVoice = voices.find(v => v.lang.startsWith('hi'));
+      const enVoice = voices.find(v => v.lang.startsWith('en'));
+      if (hiVoice) {
+        utterance.voice = hiVoice;
+        utterance.lang = hiVoice.lang;
+      } else if (enVoice) {
+        utterance.voice = enVoice;
+        utterance.lang = enVoice.lang;
+      }
+    }
+
     utterance.rate = 1.0;
     utterance.pitch = 1.0;
     utterance.onend = () => resolve();
