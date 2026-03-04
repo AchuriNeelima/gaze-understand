@@ -42,7 +42,16 @@ export function matchWakePhrase(text: string): string | null {
   return null;
 }
 
-// ── Command keywords per language ─────────────────────────────
+/** Remove matched wake phrase from text so command can be parsed in same utterance */
+export function stripWakePhrase(text: string): string {
+  for (const wp of WAKE_PHRASES) {
+    if (wp.pattern.test(text)) {
+      return text.replace(wp.pattern, '').trim();
+    }
+  }
+  return text.trim();
+}
+
 interface CommandKeywords {
   openCamera: { verbs: string[]; nouns: string[] };
   capture: { verbs: string[]; nouns: string[]; solo: string[] };

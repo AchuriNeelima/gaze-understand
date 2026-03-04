@@ -8,6 +8,7 @@ import type {
 import {
   type VoiceCommand,
   matchWakePhrase,
+  stripWakePhrase,
   matchMultilingualCommand,
   detectLanguageFromText,
   getFeedback,
@@ -148,9 +149,17 @@ export const useVoiceRecognition = (preferredLanguage: string = 'en'): UseVoiceR
           const msg = getFeedback(wakeLang, 'listening');
           setActiveWindow(); // Start timer immediately
           void speakFeedback(msg, wakeLang);
-          // Do NOT restart recognition — keep current en-US session running
-          // Chrome handles multilingual input better with en-US and we match
-          // both native script and transliterated commands
+
+          // Also support one-shot utterances like:
+          // "hello కెమెరా ఓపెన్ చేయి" / "hello dost कैमरा खोलो"
+          const remainder = stripWakePhrase(transcript);
+          const immediate = remainder ? matchMultilingualCommand(remainder) : null;
+          if (immediate) {
+            setDetectedLanguage(immediate.lang);
+            currentLangRef.current = immediate.lang;
+            setLastCommand(immediate.command);
+            setError(null);
+          }
         }
       } else if (modeRef.current === 'active') {
         const result = matchMultilingualCommand(transcript);
