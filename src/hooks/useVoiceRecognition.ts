@@ -148,13 +148,9 @@ export const useVoiceRecognition = (preferredLanguage: string = 'en'): UseVoiceR
           const msg = getFeedback(wakeLang, 'listening');
           setActiveWindow(); // Start timer immediately
           void speakFeedback(msg, wakeLang);
-          // Restart recognition with the detected language for better accuracy
-          destroyRecognition();
-          restartTimerRef.current = setTimeout(() => {
-            if (modeRef.current === 'active') {
-              createRecognitionInternal('active');
-            }
-          }, 300);
+          // Do NOT restart recognition — keep current en-US session running
+          // Chrome handles multilingual input better with en-US and we match
+          // both native script and transliterated commands
         }
       } else if (modeRef.current === 'active') {
         const result = matchMultilingualCommand(transcript);
