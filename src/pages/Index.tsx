@@ -1,62 +1,52 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Helmet } from 'react-helmet';
-import { Camera } from 'lucide-react';
-import { HeroSection, FeaturePills } from '@/components/HeroSection';
+import { Camera, Upload, Mic, MicOff, Volume2, VolumeX, Loader2, Check, Globe } from 'lucide-react';
 import { VoiceCamera } from '@/components/VoiceCamera';
-import { CaptionDisplay } from '@/components/CaptionDisplay';
-import { AccessibilityInfo } from '@/components/AccessibilityInfo';
-import { LanguageSelector } from '@/components/LanguageSelector';
-import { VoiceSelector, VOICE_OPTIONS } from '@/components/VoiceSelector';
-import { VoiceStatusIndicator } from '@/components/VoiceStatusIndicator';
 import { SafetyAlerts } from '@/components/SafetyAlerts';
 import { useTextToSpeech } from '@/hooks/useTextToSpeech';
 import { useImageCaption } from '@/hooks/useImageCaption';
 import { useVoiceRecognition } from '@/hooks/useVoiceRecognition';
-import { speakFeedback, getFeedback } from '@/utils/voiceLanguages';
+import { getFeedback, speakFeedback } from '@/utils/voiceLanguages';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 
-type AssistantState = 'passive' | 'camera_open' | 'processing';
+const LANGUAGES = [
+  { code: 'en', name: 'English' },
+  { code: 'te', name: 'Telugu' },
+  { code: 'hi', name: 'Hindi' },
+];
 
 const Index = () => {
   const [currentImage, setCurrentImage] = useState<string | null>(null);
   const [selectedLanguage, setSelectedLanguage] = useState('en');
-  const [selectedVoice, setSelectedVoice] = useState(VOICE_OPTIONS[0].id);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [triggerCapture, setTriggerCapture] = useState(false);
-  const [assistantState, setAssistantState] = useState<AssistantState>('passive');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { speak, stop, isSpeaking, isSupported: ttsSupported, setLanguage } = useTextToSpeech(selectedLanguage);
   const { caption, translatedCaption, safetyAlerts, isLoading, generateCaption, clearCaption } = useImageCaption();
-
   const {
     isListening,
     mode,
     lastCommand,
-    detectedLanguage,
     error: voiceError,
-    startPassiveListening,
+    startListening,
     stopListening,
     clearLastCommand,
-    returnToPassive,
-    keepActive,
     isSupported: voiceSupported,
-  } = useVoiceRecognition(selectedLanguage);
+  } = useVoiceRecognition();
 
-  // Sync detected language back to selected language
-  useEffect(() => {
-    if (detectedLanguage && detectedLanguage !== selectedLanguage) {
-      setSelectedLanguage(detectedLanguage);
-      setLanguage(detectedLanguage);
-    }
-  }, [detectedLanguage, selectedLanguage, setLanguage]);
-
-  // Auto-start passive listening on mount
+  // Auto-start voice on mount
   useEffect(() => {
     if (voiceSupported) {
-      const timer = setTimeout(() => {
-        startPassiveListening();
-      }, 1500);
+      const timer = setTimeout(() => startListening(), 1500);
       return () => clearTimeout(timer);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -66,195 +56,168 @@ const Index = () => {
   useEffect(() => {
     if (!lastCommand) return;
 
-    // Use detected language for feedback
-    const lang = detectedLanguage || selectedLanguage;
-
-    const handle = async () => {
-      if (lastCommand === 'open_camera') {
-        if (isCameraOpen) {
-          await speakFeedback(getFeedback(lang, 'cameraAlreadyOpen'), lang);
-        } else {
-          toast({ title: '🎤 Voice Command', description: 'Opening camera...' });
-          setIsCameraOpen(true);
-          await speakFeedback(getFeedback(lang, 'cameraOpened'), lang);
-        }
-        setAssistantState('camera_open');
-        keepActive();
-        clearLastCommand();
-      } else if (lastCommand === 'capture') {
-        if (isCameraOpen || assistantState === 'camera_open') {
-          toast({ title: '🎤 Voice Command', description: 'Capturing image...' });
-          setAssistantState('processing');
-          setTriggerCapture(true);
-          void speakFeedback(getFeedback(lang, 'capturing'), lang);
-        } else {
-          await speakFeedback(getFeedback(lang, 'cameraNotOpen'), lang);
-        }
-        clearLastCommand();
+    if (lastCommand === 'open_camera') {
+      if (!isCameraOpen) {
+        toast({ title: '🎤 Voice Command', description: 'Opening camera...' });
+        setIsCameraOpen(true);
+        void speakFeedback(getFeedback('cameraOpened'));
+      } else {
+        void speakFeedback(getFeedback('cameraAlreadyOpen'));
       }
-    };
+      clearLastCommand();
+    } else if (lastCommand === 'capture') {
+      if (isCameraOpen) {
+        toast({ title: '🎤 Voice Command', description: 'Capturing...' });
+        setTriggerCapture(true);
+        void speakFeedback(getFeedback('capturing'));
+      } else {
+        void speakFeedback(getFeedback('cameraNotOpen'));
+      }
+      clearLastCommand();
+    } else if (lastCommand === 'upload') {
+      toast({ title: '🎤 Voice Command', description: 'Opening file selector...' });
+      void speakFeedback(getFeedback('uploadTriggered'));
+      fileInputRef.current?.click();
+      clearLastCommand();
+    }
+  }, [lastCommand, isCameraOpen, clearLastCommand]);
 
-    handle();
-  }, [lastCommand, isCameraOpen, assistantState, clearLastCommand, keepActive, detectedLanguage, selectedLanguage]);
-
-  // Show voice errors as toasts
+  // Show voice errors
   useEffect(() => {
     if (voiceError) {
-      toast({ title: 'Voice Recognition', description: voiceError, variant: 'destructive' });
+      toast({ title: 'Voice', description: voiceError, variant: 'destructive' });
     }
   }, [voiceError]);
 
   const handleCapturedImage = useCallback(async (imageData: string) => {
     setCurrentImage(imageData);
     setIsCameraOpen(false);
-    setAssistantState('processing');
     stop();
-    // Generate caption using the active language
     await generateCaption(imageData, selectedLanguage);
   }, [generateCaption, stop, selectedLanguage]);
 
-  const handleCaptureHandled = useCallback(() => {
-    setTriggerCapture(false);
-  }, []);
+  const handleCaptureHandled = useCallback(() => setTriggerCapture(false), []);
 
-  const handleVoiceToggle = useCallback(() => {
-    if (mode !== 'off') {
-      stopListening();
-    } else {
-      startPassiveListening();
-    }
-  }, [mode, startPassiveListening, stopListening]);
-
-  const handleSpeak = useCallback(() => {
-    const textToSpeak = translatedCaption || caption;
-    if (textToSpeak) {
-      if (safetyAlerts.length > 0) {
-        speak(`Warning! ${safetyAlerts.join('. ')}. ${textToSpeak}`, selectedLanguage, selectedVoice);
-      } else {
-        speak(textToSpeak, selectedLanguage, selectedVoice);
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result as string;
+      if (result?.startsWith('data:image/')) {
+        setCurrentImage(result);
+        void generateCaption(result, selectedLanguage);
       }
-    }
-  }, [caption, translatedCaption, safetyAlerts, speak, selectedLanguage, selectedVoice]);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
-  const handleLanguageChange = useCallback(async (newLanguage: string) => {
-    setSelectedLanguage(newLanguage);
-    setLanguage(newLanguage);
+  const handleLanguageChange = useCallback(async (newLang: string) => {
+    setSelectedLanguage(newLang);
+    setLanguage(newLang);
     if (currentImage && !isLoading) {
-      await generateCaption(currentImage, newLanguage);
+      await generateCaption(currentImage, newLang);
     }
   }, [currentImage, isLoading, generateCaption, setLanguage]);
+
+  const handleSpeak = useCallback(() => {
+    const text = translatedCaption || caption;
+    if (text) {
+      const full = safetyAlerts.length > 0
+        ? `Warning! ${safetyAlerts.join('. ')}. ${text}`
+        : text;
+      speak(full, selectedLanguage);
+    }
+  }, [caption, translatedCaption, safetyAlerts, speak, selectedLanguage]);
 
   const handleNewCapture = useCallback(() => {
     setCurrentImage(null);
     clearCaption();
     stop();
-    setAssistantState('passive');
-    if (voiceSupported) {
-      returnToPassive();
-    }
-  }, [clearCaption, stop, voiceSupported, returnToPassive]);
+  }, [clearCaption, stop]);
 
-  // Auto-read caption when generated, then return to passive listening
+  // Auto-read caption when generated
   useEffect(() => {
     if (caption && ttsSupported && !isLoading) {
-      const textToSpeak = translatedCaption || caption;
+      const text = translatedCaption || caption;
       const timer = setTimeout(() => {
-        const fullText = safetyAlerts.length > 0
-          ? `Warning! ${safetyAlerts.join('. ')}. ${textToSpeak}`
-          : textToSpeak;
-        speak(fullText, selectedLanguage, selectedVoice);
-
-        if (assistantState === 'processing' && voiceSupported) {
-          setTimeout(() => {
-            setAssistantState('passive');
-            returnToPassive();
-          }, 3000);
-        }
+        const full = safetyAlerts.length > 0
+          ? `Warning! ${safetyAlerts.join('. ')}. ${text}`
+          : text;
+        speak(full, selectedLanguage);
       }, 500);
       return () => clearTimeout(timer);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caption, translatedCaption, safetyAlerts, ttsSupported, isLoading, assistantState, voiceSupported, returnToPassive]);
+  }, [caption, translatedCaption, isLoading]);
 
-  useEffect(() => {
-    if (assistantState === 'processing' && caption && !isLoading && !ttsSupported && voiceSupported) {
-      setAssistantState('passive');
-      returnToPassive();
-    }
-  }, [assistantState, caption, isLoading, ttsSupported, voiceSupported, returnToPassive]);
-
-  // Multilingual instruction text
-  const getInstructionText = () => {
-    if (selectedLanguage === 'hi') {
-      return (
-          <p className="text-accessible-lg text-muted-foreground max-w-2xl mx-auto">
-            वॉइस कमांड सक्रिय करने के लिए <strong>"Hello Dost"</strong> या <strong>"सुनो दोस्त"</strong> बोलें, फिर <strong>"कैमरा खोलो"</strong> बोलें।
-          या नीचे बटन दबाएं। फिर <strong>"फोटो खींचो"</strong> बोलें या कैमरा बटन दबाएं।
-        </p>
-      );
-    }
-    if (selectedLanguage === 'te') {
-      return (
-          <p className="text-accessible-lg text-muted-foreground max-w-2xl mx-auto">
-            వాయిస్ కమాండ్‌లను సక్రియం చేయడానికి <strong>"Hello"</strong> అని చెప్పండి, తర్వాత <strong>"కెమెరా ఓపెన్ చేయి"</strong> అని చెప్పండి.
-          లేదా కింద బటన్ నొక్కండి. తర్వాత <strong>"ఫోటో తీయి"</strong> అని చెప్పండి లేదా కెమెరా బటన్ నొక్కండి.
-        </p>
-      );
-    }
-    return (
-      <p className="text-accessible-lg text-muted-foreground max-w-2xl mx-auto">
-        Say <strong>"Hey Buddy"</strong> to activate voice commands, then say <strong>"Open the Camera"</strong>.
-        Or use the button below. Then say <strong>"Capture"</strong> or tap the camera button.
-      </p>
-    );
-  };
+  const displayCaption = translatedCaption || caption;
 
   return (
     <>
       <Helmet>
-        <title>See Through Sound - AI Image Captioning for Visually Impaired</title>
-        <meta
-          name="description"
-          content="AI-powered image caption generator with voice-controlled camera, text-to-speech in 15+ languages, safety alerts, and accessibility features."
-        />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>AI Image Captioner — Voice Controlled</title>
+        <meta name="description" content="Voice-controlled AI image captioning with multilingual output. Capture or upload images and hear captions in English, Telugu, or Hindi." />
       </Helmet>
 
-      <a href="#main-content" className="skip-link">Skip to main content</a>
-
       <div className="min-h-screen bg-background">
-        <main id="main-content" className="container max-w-4xl mx-auto px-4 py-8 md:py-16" role="main">
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileUpload}
+          className="hidden"
+          aria-hidden="true"
+        />
+
+        <main className="container max-w-2xl mx-auto px-4 py-8 md:py-12">
           {/* Header */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
-            <HeroSection />
-            <div className="flex flex-wrap items-center gap-2">
-              <LanguageSelector selectedLanguage={selectedLanguage} onLanguageChange={handleLanguageChange} />
-              <VoiceSelector selectedVoice={selectedVoice} onVoiceChange={setSelectedVoice} />
-              <VoiceStatusIndicator
-                mode={mode}
-                isListening={isListening}
-                onToggle={handleVoiceToggle}
-                isSupported={voiceSupported}
-              />
+          <header className="flex items-center justify-between mb-8">
+            <h1 className="text-2xl md:text-3xl font-bold text-gradient-primary">
+              AI Image Captioner
+            </h1>
+
+            <div className="flex items-center gap-2">
+              {/* Language selector */}
+              <Select value={selectedLanguage} onValueChange={handleLanguageChange}>
+                <SelectTrigger className="w-[140px] h-10" aria-label="Select output language">
+                  <Globe className="h-4 w-4 mr-2 flex-shrink-0" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LANGUAGES.map(l => (
+                    <SelectItem key={l.code} value={l.code}>{l.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Voice toggle */}
+              {voiceSupported && (
+                <Button
+                  variant={mode === 'listening' ? 'default' : 'outline'}
+                  size="icon"
+                  onClick={() => mode === 'listening' ? stopListening() : startListening()}
+                  aria-label={mode === 'listening' ? 'Stop voice input' : 'Start voice input'}
+                  className={mode === 'listening' ? 'voice-listening' : ''}
+                >
+                  {mode === 'listening' ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+                </Button>
+              )}
             </div>
-          </div>
+          </header>
 
-          {/* Feature Pills */}
-          {!currentImage && !isCameraOpen && <FeaturePills />}
-
-          {/* Intro text & manual capture button */}
-          {!currentImage && !isCameraOpen && (
-            <div className="text-center mt-8 mb-8 space-y-6">
-              {getInstructionText()}
-              <Button variant="hero" size="xl" onClick={() => { setIsCameraOpen(true); setAssistantState('camera_open'); if (voiceSupported) keepActive(); }} aria-label="Open camera manually">
-                <Camera className="h-6 w-6 mr-2" />
-                Open Camera
-              </Button>
+          {/* Listening indicator */}
+          {mode === 'listening' && (
+            <div className="text-center text-sm text-muted-foreground mb-6 animate-fade-in">
+              🎤 Listening — say <strong>"Open camera"</strong>, <strong>"Capture"</strong>, or <strong>"Upload image"</strong>
             </div>
           )}
 
-          <section className="space-y-6 mt-8" aria-label="Voice-controlled camera and caption">
-            {/* Camera */}
+          {/* Camera / Image / Controls */}
+          <div className="space-y-6">
+            {/* Camera view */}
             <VoiceCamera
               isOpen={isCameraOpen}
               onCapture={handleCapturedImage}
@@ -265,51 +228,81 @@ const Index = () => {
 
             {/* Captured image preview */}
             {currentImage && !isCameraOpen && (
-              <div className="relative animate-scale-in">
-                <div className="relative rounded-2xl overflow-hidden border-2 border-border bg-card">
-                  <img
-                    src={currentImage}
-                    alt="Captured image for caption generation"
-                    className="w-full h-auto max-h-[400px] object-contain"
-                  />
+              <div className="rounded-2xl overflow-hidden border-2 border-border bg-card animate-scale-in">
+                <img
+                  src={currentImage}
+                  alt="Captured or uploaded image"
+                  className="w-full h-auto max-h-[400px] object-contain"
+                />
+              </div>
+            )}
+
+            {/* Action buttons — show when no image yet and camera is closed */}
+            {!currentImage && !isCameraOpen && (
+              <div className="flex flex-col items-center gap-4 py-12">
+                <p className="text-muted-foreground text-center mb-4">
+                  Capture or upload an image to generate a caption
+                </p>
+                <div className="flex gap-4">
+                  <Button variant="hero" size="xl" onClick={() => setIsCameraOpen(true)}>
+                    <Camera className="h-5 w-5 mr-2" />
+                    Camera
+                  </Button>
+                  <Button variant="outline" size="xl" onClick={() => fileInputRef.current?.click()}>
+                    <Upload className="h-5 w-5 mr-2" />
+                    Upload
+                  </Button>
                 </div>
               </div>
             )}
 
-            {/* Safety Alerts */}
+            {/* Safety alerts */}
             {safetyAlerts.length > 0 && !isLoading && (
               <SafetyAlerts alerts={safetyAlerts} onSpeak={(text) => speak(text, selectedLanguage)} />
             )}
 
-            {/* Caption Display */}
-            <CaptionDisplay
-              caption={translatedCaption || caption}
-              isLoading={isLoading}
-              isSpeaking={isSpeaking}
-              onSpeak={handleSpeak}
-              onStopSpeaking={stop}
-            />
-
-            {/* Action buttons after caption */}
-            {caption && !isLoading && (
-              <div className="flex flex-wrap justify-center gap-4">
-                <Button variant="outline" size="lg" onClick={handleNewCapture} aria-label="Take a new photo">
-                  New Capture
-                </Button>
+            {/* Loading state */}
+            {isLoading && (
+              <div className="bg-card border-2 border-border rounded-2xl p-8 text-center" role="status" aria-busy="true">
+                <Loader2 className="w-10 h-10 text-primary animate-spin mx-auto mb-3" />
+                <p className="text-muted-foreground">Generating caption...</p>
               </div>
             )}
-          </section>
 
-          <AccessibilityInfo />
+            {/* Caption display */}
+            {displayCaption && !isLoading && (
+              <div className="bg-card border-2 border-primary/30 rounded-2xl p-6 animate-slide-up">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 rounded-full bg-success/20 flex items-center justify-center">
+                    <Check className="w-4 h-4 text-success" />
+                  </div>
+                  <h2 className="text-lg font-semibold">Caption</h2>
+                </div>
 
-          <footer className="mt-16 pt-8 border-t border-border text-center">
-            <p className="text-muted-foreground text-sm">
-              Powered by AI vision technology. Designed with accessibility in mind.
-            </p>
-            <p className="text-muted-foreground text-xs mt-2">
-              Wake words: "Hey Buddy" | "Hello Dost" / "सुनो दोस्त" | "Hello" (Telugu) | Multilingual voice commands
-            </p>
-          </footer>
+                <p className="text-accessible-xl text-foreground bg-muted/50 rounded-xl p-5 mb-5 leading-relaxed">
+                  {displayCaption}
+                </p>
+
+                <div className="flex flex-wrap gap-3">
+                  {isSpeaking ? (
+                    <Button variant="speaking" size="lg" onClick={stop}>
+                      <VolumeX className="h-5 w-5 mr-2" />
+                      Stop
+                    </Button>
+                  ) : (
+                    <Button variant="hero" size="lg" onClick={handleSpeak}>
+                      <Volume2 className="h-5 w-5 mr-2" />
+                      Read Aloud
+                    </Button>
+                  )}
+
+                  <Button variant="outline" size="lg" onClick={handleNewCapture}>
+                    New Image
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </main>
       </div>
     </>
