@@ -1,8 +1,39 @@
 /**
- * Voice command utilities — English-only input
+ * Voice command utilities — English-only input with wake word support
  */
 
 export type VoiceCommand = 'open_camera' | 'capture' | 'upload';
+
+// ── Wake words ────────────────────────────────────────────────
+const WAKE_PHRASES = [
+  'hey buddy',
+  'hi buddy',
+  'hey body',   // common misrecognition
+  'hi body',
+  'hey birdie',
+  'hi birdie',
+  'hey betty',
+  'hi betty',
+];
+
+/** Check if transcript contains a wake word. Returns true if found. */
+export function containsWakeWord(text: string): boolean {
+  const norm = normalize(text);
+  return WAKE_PHRASES.some(w => norm.includes(w));
+}
+
+/** Strip the wake phrase from text and return the remainder */
+export function stripWakePhrase(text: string): string {
+  let norm = normalize(text);
+  for (const w of WAKE_PHRASES) {
+    const idx = norm.indexOf(w);
+    if (idx !== -1) {
+      norm = norm.slice(idx + w.length).trim();
+      break;
+    }
+  }
+  return norm;
+}
 
 // ── Voice commands (English only) ─────────────────────────────
 interface CommandKeywords {
@@ -55,16 +86,19 @@ export function matchCommand(text: string): VoiceCommand | null {
 
 // ── Feedback messages (English) ───────────────────────────────
 const FEEDBACK: Record<string, string> = {
-  listening: "I'm listening. Say open camera, capture, or upload image.",
-  cameraOpened: 'Camera opened. Say capture to take a photo.',
-  cameraAlreadyOpen: 'Camera is already open. Say capture to take a photo.',
+  listening: "Say hey buddy to activate me.",
+  wakeDetected: "Yes? What would you like me to do?",
+  activeListening: "I'm listening. Say open camera, capture, or upload image.",
+  cameraOpened: 'Camera opened. Say hey buddy capture to take a photo.',
+  cameraAlreadyOpen: 'Camera is already open. Say hey buddy capture to take a photo.',
   capturing: 'Capturing image.',
-  cameraNotOpen: 'Camera is not open. Say open the camera first.',
+  cameraNotOpen: 'Camera is not open. Say hey buddy open camera first.',
   uploadTriggered: 'Opening file selector.',
   micDenied: 'Microphone access denied. Please enable microphone permission.',
   notSupported: 'Voice recognition is not supported in this browser.',
   noSpeech: 'No speech detected. Please try again.',
   notRecognized: 'Command not recognised. Say open camera, capture, or upload image.',
+  timeout: 'I didn\'t hear a command. Say hey buddy to activate me again.',
 };
 
 export function getFeedback(key: string): string {

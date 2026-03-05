@@ -8,11 +8,13 @@ import type {
 import {
   type VoiceCommand,
   matchCommand,
+  containsWakeWord,
+  stripWakePhrase,
   getFeedback,
   speakFeedback,
 } from '@/utils/voiceLanguages';
 
-export type VoiceMode = 'listening' | 'off';
+export type VoiceMode = 'passive' | 'active' | 'off';
 export type { VoiceCommand } from '@/utils/voiceLanguages';
 
 interface UseVoiceRecognitionReturn {
@@ -32,6 +34,8 @@ function getSpeechRecognitionAPI(): SpeechRecognitionConstructor | null {
   return (win.SpeechRecognition ?? win.webkitSpeechRecognition ?? null) as SpeechRecognitionConstructor | null;
 }
 
+const ACTIVE_TIMEOUT_MS = 8000; // return to passive after 8s of no command
+
 export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
   const [isListening, setIsListening] = useState(false);
   const [mode, setMode] = useState<VoiceMode>('off');
@@ -40,6 +44,7 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const stoppedManuallyRef = useRef(false);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const modeRef = useRef<VoiceMode>('off');
 
   const SpeechRecognitionAPI = getSpeechRecognitionAPI();
@@ -52,7 +57,38 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     setError(null);
   }, []);
 
+  const clearActiveTimer = useCallback(() => {
+    if (activeTimerRef.current) {
+      clearTimeout(activeTimerRef.current);
+      activeTimerRef.current = null;
+    }
+  }, []);
+
+  const goPassive = useCallback(() => {
+    clearActiveTimer();
+    setMode('passive');
+    modeRef.current = 'passive';
+    setError(null);
+    console.log('[Voice] → passive mode');
+  }, [clearActiveTimer]);
+
+  const goActive = useCallback(() => {
+    clearActiveTimer();
+    setMode('active');
+    modeRef.current = 'active';
+    setError(null);
+    console.log('[Voice] → active mode');
+    // Auto-timeout back to passive
+    activeTimerRef.current = setTimeout(() => {
+      if (modeRef.current === 'active') {
+        void speakFeedback(getFeedback('timeout'));
+        goPassive();
+      }
+    }, ACTIVE_TIMEOUT_MS);
+  }, [clearActiveTimer, goPassive]);
+
   const destroyRecognition = useCallback(() => {
+    clearActiveTimer();
     if (restartTimerRef.current) {
       clearTimeout(restartTimerRef.current);
       restartTimerRef.current = null;
@@ -68,7 +104,7 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
       recognitionRef.current = null;
     }
     setIsListening(false);
-  }, []);
+  }, [clearActiveTimer]);
 
   const createRecognition = useCallback(() => {
     if (!SpeechRecognitionAPI) return;
@@ -86,15 +122,39 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       const lastIdx = event.results.length - 1;
       const transcript = event.results[lastIdx][0].transcript.trim();
-      console.log('Recognized:', transcript);
+      console.log('[Voice] Recognized:', transcript, '| mode:', modeRef.current);
 
-      const cmd = matchCommand(transcript);
-      if (cmd) {
-        setLastCommand(cmd);
-        setError(null);
-      } else {
-        setError(getFeedback('notRecognized'));
-        void speakFeedback(getFeedback('notRecognized'));
+      const hasWake = containsWakeWord(transcript);
+
+      if (modeRef.current === 'passive') {
+        if (hasWake) {
+          // Check if command is included after wake word
+          const remainder = stripWakePhrase(transcript);
+          const cmd = remainder ? matchCommand(remainder) : null;
+          if (cmd) {
+            // Wake + command in one sentence
+            setLastCommand(cmd);
+            setError(null);
+            goPassive(); // done, back to passive
+          } else {
+            // Just wake word, go active
+            void speakFeedback(getFeedback('wakeDetected'));
+            goActive();
+          }
+        }
+        // else: ignore non-wake speech in passive mode
+      } else if (modeRef.current === 'active') {
+        // In active mode, try to match command (with or without wake word)
+        const textToMatch = hasWake ? stripWakePhrase(transcript) : transcript;
+        const cmd = matchCommand(textToMatch);
+        if (cmd) {
+          setLastCommand(cmd);
+          setError(null);
+          goPassive(); // command handled, back to passive
+        } else {
+          setError(getFeedback('notRecognized'));
+          void speakFeedback(getFeedback('notRecognized'));
+        }
       }
     };
 
@@ -108,15 +168,18 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
         return;
       }
       if (event.error === 'no-speech') {
-        setError(getFeedback('noSpeech'));
+        // Don't show error in passive mode
+        if (modeRef.current === 'active') {
+          setError(getFeedback('noSpeech'));
+        }
       }
     };
 
     recognition.onend = () => {
       setIsListening(false);
-      if (!stoppedManuallyRef.current && modeRef.current === 'listening') {
+      if (!stoppedManuallyRef.current && modeRef.current !== 'off') {
         restartTimerRef.current = setTimeout(() => {
-          if (modeRef.current === 'listening') {
+          if (modeRef.current !== 'off') {
             try { recognition.start(); } catch { createRecognition(); }
           }
         }, 300);
@@ -125,11 +188,11 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
 
     try { recognition.start(); } catch {
       restartTimerRef.current = setTimeout(() => {
-        if (modeRef.current === 'listening') createRecognition();
+        if (modeRef.current !== 'off') createRecognition();
       }, 500);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [SpeechRecognitionAPI, destroyRecognition]);
+  }, [SpeechRecognitionAPI, destroyRecognition, goActive, goPassive]);
 
   const startListening = useCallback(() => {
     if (!SpeechRecognitionAPI) {
@@ -140,8 +203,8 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     stoppedManuallyRef.current = false;
     setError(null);
     setLastCommand(null);
-    setMode('listening');
-    modeRef.current = 'listening';
+    setMode('passive');
+    modeRef.current = 'passive';
     createRecognition();
   }, [SpeechRecognitionAPI, createRecognition]);
 

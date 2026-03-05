@@ -196,22 +196,27 @@ const Index = () => {
               {/* Voice toggle */}
               {voiceSupported && (
                 <Button
-                  variant={mode === 'listening' ? 'default' : 'outline'}
+                  variant={mode !== 'off' ? 'default' : 'outline'}
                   size="icon"
-                  onClick={() => mode === 'listening' ? stopListening() : startListening()}
-                  aria-label={mode === 'listening' ? 'Stop voice input' : 'Start voice input'}
-                  className={mode === 'listening' ? 'voice-listening' : ''}
+                  onClick={() => mode !== 'off' ? stopListening() : startListening()}
+                  aria-label={mode !== 'off' ? 'Stop voice input' : 'Start voice input'}
+                  className={mode === 'active' ? 'voice-listening' : ''}
                 >
-                  {mode === 'listening' ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+                  {mode !== 'off' ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
                 </Button>
               )}
             </div>
           </header>
 
           {/* Listening indicator */}
-          {mode === 'listening' && (
+          {mode === 'passive' && (
             <div className="text-center text-sm text-muted-foreground mb-6 animate-fade-in">
-              🎤 Listening — say <strong>"Open camera"</strong>, <strong>"Capture"</strong>, or <strong>"Upload image"</strong>
+              🎤 Say <strong>"Hey Buddy"</strong> to activate voice commands
+            </div>
+          )}
+          {mode === 'active' && (
+            <div className="text-center text-sm text-primary font-medium mb-6 animate-fade-in">
+              🟢 Listening — say <strong>"Open camera"</strong>, <strong>"Capture"</strong>, or <strong>"Upload image"</strong>
             </div>
           )}
 
