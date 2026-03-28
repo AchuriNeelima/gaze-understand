@@ -134,39 +134,47 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
       const hasWake = containsWakeWord(transcript);
 
       if (modeRef.current === 'passive') {
-        if (hasWake) {
-          const remainder = stripWakePhrase(transcript);
-          const cmd = remainder ? matchCommand(remainder) : null;
-          if (cmd) {
-            setLastCommand(cmd);
-            setError(null);
-            // Stay active after open_camera so "capture" works next
-            if (cmd === 'open_camera') {
-              goActive();
-            } else {
-              goPassive();
-            }
-          } else {
-            void speakFeedback(getFeedback('wakeDetected'));
-            goActive();
-          }
-        }
-      } else if (modeRef.current === 'active') {
-        const textToMatch = hasWake ? stripWakePhrase(transcript) : transcript;
-        const cmd = matchCommand(textToMatch);
+        if (!hasWake) return;
+
+        const remainder = stripWakePhrase(transcript);
+        const cmd = remainder ? matchCommand(remainder) : null;
+
         if (cmd) {
           setLastCommand(cmd);
           setError(null);
-          // Stay active after open_camera, go passive after capture/upload
           if (cmd === 'open_camera') {
-            goActive(); // reset timer but stay active
+            goActive();
           } else {
             goPassive();
           }
-        } else {
-          setError(getFeedback('notRecognized'));
-          void speakFeedback(getFeedback('notRecognized'));
+          return;
         }
+
+        goActive(false);
+        void speakFeedback(getFeedback('wakeDetected')).finally(() => {
+          if (modeRef.current === 'active') {
+            scheduleActiveTimeout();
+          }
+        });
+        return;
+      }
+
+      if (modeRef.current === 'active') {
+        const textToMatch = hasWake ? stripWakePhrase(transcript) : transcript;
+        const cmd = matchCommand(textToMatch);
+
+        if (cmd) {
+          setLastCommand(cmd);
+          setError(null);
+          if (cmd === 'open_camera') {
+            goActive();
+          } else {
+            goPassive();
+          }
+          return;
+        }
+
+        scheduleActiveTimeout();
       }
     };
 
