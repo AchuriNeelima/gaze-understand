@@ -88,22 +88,30 @@ export const VoiceCamera: React.FC<VoiceCameraProps> = ({
 
   // Handle voice-triggered capture
   useEffect(() => {
-    if (triggerCapture && isCameraReady) {
+    if (!triggerCapture) return;
+
+    // Try immediately regardless of isCameraReady flag
+    if (doCapture()) {
+      onCaptureHandled();
+      return;
+    }
+
+    // Retry up to 15 times (3 seconds)
+    let attempts = 0;
+    const retryInterval = setInterval(() => {
+      attempts++;
       if (doCapture()) {
         onCaptureHandled();
-        return;
+        clearInterval(retryInterval);
+      } else if (attempts >= 15) {
+        onCaptureHandled();
+        clearInterval(retryInterval);
+        toast({ title: 'Capture failed', description: 'Camera not ready. Try again.', variant: 'destructive' });
       }
+    }, 200);
 
-      const retryInterval = setInterval(() => {
-        if (doCapture()) {
-          onCaptureHandled();
-          clearInterval(retryInterval);
-        }
-      }, 200);
-
-      return () => clearInterval(retryInterval);
-    }
-  }, [triggerCapture, isCameraReady, doCapture, onCaptureHandled]);
+    return () => clearInterval(retryInterval);
+  }, [triggerCapture, doCapture, onCaptureHandled]);
 
   const handleVideoReady = useCallback(() => {
     setIsCameraReady(true);
