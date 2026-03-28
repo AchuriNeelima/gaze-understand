@@ -128,29 +128,34 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
 
       if (modeRef.current === 'passive') {
         if (hasWake) {
-          // Check if command is included after wake word
           const remainder = stripWakePhrase(transcript);
           const cmd = remainder ? matchCommand(remainder) : null;
           if (cmd) {
-            // Wake + command in one sentence
             setLastCommand(cmd);
             setError(null);
-            goPassive(); // done, back to passive
+            // Stay active after open_camera so "capture" works next
+            if (cmd === 'open_camera') {
+              goActive();
+            } else {
+              goPassive();
+            }
           } else {
-            // Just wake word, go active
             void speakFeedback(getFeedback('wakeDetected'));
             goActive();
           }
         }
-        // else: ignore non-wake speech in passive mode
       } else if (modeRef.current === 'active') {
-        // In active mode, try to match command (with or without wake word)
         const textToMatch = hasWake ? stripWakePhrase(transcript) : transcript;
         const cmd = matchCommand(textToMatch);
         if (cmd) {
           setLastCommand(cmd);
           setError(null);
-          goPassive(); // command handled, back to passive
+          // Stay active after open_camera, go passive after capture/upload
+          if (cmd === 'open_camera') {
+            goActive(); // reset timer but stay active
+          } else {
+            goPassive();
+          }
         } else {
           setError(getFeedback('notRecognized'));
           void speakFeedback(getFeedback('notRecognized'));
