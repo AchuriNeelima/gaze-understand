@@ -134,6 +134,8 @@ export const VoiceCamera: React.FC<VoiceCameraProps> = ({
         playsInline
         muted
         onCanPlay={handleVideoReady}
+        onLoadedMetadata={handleVideoReady}
+        onPlaying={handleVideoReady}
         className="w-full h-auto max-h-[400px] object-cover"
         aria-label="Camera preview"
       />
