@@ -22,7 +22,7 @@ interface UseVoiceRecognitionReturn {
   mode: VoiceMode;
   lastCommand: VoiceCommand | null;
   error: string | null;
-  startListening: (initialMode?: VoiceMode) => void;
+  startListening: () => void;
   stopListening: () => void;
   clearLastCommand: () => void;
   isSupported: boolean;
@@ -141,16 +141,8 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
             void speakFeedback(getFeedback('wakeDetected'));
             goActive();
           }
-        } else {
-          // Also allow direct commands in passive mode (no wake phrase).
-          // This improves reliability for quick phrases like "capture photo".
-          const directCmd = matchCommand(transcript);
-          if (directCmd) {
-            setLastCommand(directCmd);
-            setError(null);
-            goPassive();
-          }
         }
+        // else: ignore non-wake speech in passive mode
       } else if (modeRef.current === 'active') {
         // In active mode, try to match command (with or without wake word)
         const textToMatch = hasWake ? stripWakePhrase(transcript) : transcript;
@@ -202,7 +194,7 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [SpeechRecognitionAPI, destroyRecognition, goActive, goPassive]);
 
-  const startListening = useCallback((initialMode: VoiceMode = 'passive') => {
+  const startListening = useCallback(() => {
     if (!SpeechRecognitionAPI) {
       setError(getFeedback('notSupported'));
       void speakFeedback(getFeedback('notSupported'));
@@ -211,8 +203,8 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     stoppedManuallyRef.current = false;
     setError(null);
     setLastCommand(null);
-    setMode(initialMode);
-    modeRef.current = initialMode;
+    setMode('passive');
+    modeRef.current = 'passive';
     createRecognition();
   }, [SpeechRecognitionAPI, createRecognition]);
 

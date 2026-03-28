@@ -9,7 +9,6 @@ interface VoiceCameraProps {
   onClose: () => void;
   triggerCapture: boolean;
   onCaptureHandled: () => void;
-  onReady?: () => void;
 }
 
 export const VoiceCamera: React.FC<VoiceCameraProps> = ({
@@ -18,30 +17,20 @@ export const VoiceCamera: React.FC<VoiceCameraProps> = ({
   onClose,
   triggerCapture,
   onCaptureHandled,
-  onReady,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const retryTimerRef = useRef<number | null>(null);
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
 
-  const clearRetryTimer = useCallback(() => {
-    if (retryTimerRef.current !== null) {
-      window.clearTimeout(retryTimerRef.current);
-      retryTimerRef.current = null;
-    }
-  }, []);
-
   const stopCamera = useCallback(() => {
-    clearRetryTimer();
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
     setIsCameraReady(false);
-  }, [clearRetryTimer]);
+  }, []);
 
   const startCamera = useCallback(async (facing: 'user' | 'environment') => {
     try {
@@ -52,20 +41,6 @@ export const VoiceCamera: React.FC<VoiceCameraProps> = ({
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        try {
-          // Ensure the video actually starts playing so onCanPlay/onLoaded events fire
-          // which set `isCameraReady` and allow voice-triggered captures to run.
-          // Some browsers require an explicit play() call even with `autoPlay`.
-          // eslint-disable-next-line @typescript-eslint/no-floating-promises
-          videoRef.current.play();
-          if (videoRef.current.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-            setIsCameraReady(true);
-            if (onReady) onReady();
-          }
-        } catch (err) {
-          // ignore play() errors; readiness will still be detected via events when possible
-          console.debug('Video play() failed to start automatically:', err);
-        }
       }
     } catch (err) {
       console.error('Camera error:', err);
@@ -111,54 +86,28 @@ export const VoiceCamera: React.FC<VoiceCameraProps> = ({
     return false;
   }, [stopCamera, onCapture]);
 
-  const tryCaptureWithRetry = useCallback((options?: { maxAttempts?: number; intervalMs?: number; onSuccess?: () => void; onFailure?: () => void }) => {
-    const maxAttempts = options?.maxAttempts ?? 10;
-    const intervalMs = options?.intervalMs ?? 180;
-    let attempts = 0;
-
-    clearRetryTimer();
-
-    const attempt = () => {
-      if (doCapture()) {
-        options?.onSuccess?.();
-        clearRetryTimer();
-        return;
-      }
-
-      attempts += 1;
-      if (attempts >= maxAttempts) {
-        toast({
-          title: 'Capture failed',
-          description: 'Camera is not ready yet. Please try again.',
-          variant: 'destructive',
-        });
-        options?.onFailure?.();
-        clearRetryTimer();
-        return;
-      }
-
-      retryTimerRef.current = window.setTimeout(attempt, intervalMs);
-    };
-
-    attempt();
-  }, [clearRetryTimer, doCapture]);
-
   // Handle voice-triggered capture
   useEffect(() => {
-    if (triggerCapture) {
-      tryCaptureWithRetry({
-        onSuccess: onCaptureHandled,
-        onFailure: onCaptureHandled,
-      });
-    }
-  }, [triggerCapture, onCaptureHandled, tryCaptureWithRetry]);
+    if (triggerCapture && isCameraReady) {
+      if (doCapture()) {
+        onCaptureHandled();
+        return;
+      }
 
-  useEffect(() => () => clearRetryTimer(), [clearRetryTimer]);
+      const retryInterval = setInterval(() => {
+        if (doCapture()) {
+          onCaptureHandled();
+          clearInterval(retryInterval);
+        }
+      }, 200);
+
+      return () => clearInterval(retryInterval);
+    }
+  }, [triggerCapture, isCameraReady, doCapture, onCaptureHandled]);
 
   const handleVideoReady = useCallback(() => {
     setIsCameraReady(true);
-    if (onReady) onReady();
-  }, [onReady]);
+  }, []);
 
   const switchCamera = async () => {
     const newFacing = facingMode === 'user' ? 'environment' : 'user';
@@ -176,8 +125,6 @@ export const VoiceCamera: React.FC<VoiceCameraProps> = ({
         autoPlay
         playsInline
         muted
-        onLoadedMetadata={handleVideoReady}
-        onPlaying={handleVideoReady}
         onCanPlay={handleVideoReady}
         className="w-full h-auto max-h-[400px] object-cover"
         aria-label="Camera preview"
@@ -198,7 +145,7 @@ export const VoiceCamera: React.FC<VoiceCameraProps> = ({
           <Button
             variant="hero"
             size="xl"
-            onClick={() => tryCaptureWithRetry()}
+            onClick={doCapture}
             disabled={!isCameraReady}
             className="rounded-full w-20 h-20"
             aria-label="Take photo"
