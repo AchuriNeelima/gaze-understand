@@ -64,6 +64,19 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     }
   }, []);
 
+  const scheduleActiveTimeout = useCallback(() => {
+    clearActiveTimer();
+    activeTimerRef.current = setTimeout(() => {
+      if (modeRef.current === 'active') {
+        void speakFeedback(getFeedback('timeout'));
+        setMode('passive');
+        modeRef.current = 'passive';
+        setError(null);
+        console.log('[Voice] → passive mode');
+      }
+    }, ACTIVE_TIMEOUT_MS);
+  }, [clearActiveTimer]);
+
   const goPassive = useCallback(() => {
     clearActiveTimer();
     setMode('passive');
@@ -72,20 +85,14 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     console.log('[Voice] → passive mode');
   }, [clearActiveTimer]);
 
-  const goActive = useCallback(() => {
+  const goActive = useCallback((resetTimer = true) => {
     clearActiveTimer();
     setMode('active');
     modeRef.current = 'active';
     setError(null);
     console.log('[Voice] → active mode');
-    // Auto-timeout back to passive
-    activeTimerRef.current = setTimeout(() => {
-      if (modeRef.current === 'active') {
-        void speakFeedback(getFeedback('timeout'));
-        goPassive();
-      }
-    }, ACTIVE_TIMEOUT_MS);
-  }, [clearActiveTimer, goPassive]);
+    if (resetTimer) scheduleActiveTimeout();
+  }, [clearActiveTimer, scheduleActiveTimeout]);
 
   const destroyRecognition = useCallback(() => {
     clearActiveTimer();
