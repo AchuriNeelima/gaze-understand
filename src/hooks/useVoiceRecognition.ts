@@ -34,7 +34,7 @@ function getSpeechRecognitionAPI(): SpeechRecognitionConstructor | null {
   return (win.SpeechRecognition ?? win.webkitSpeechRecognition ?? null) as SpeechRecognitionConstructor | null;
 }
 
-const ACTIVE_TIMEOUT_MS = 8000; // return to passive after 8s of no command
+const ACTIVE_TIMEOUT_MS = 15000; // return to passive after 15s of no command
 
 export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
   const [isListening, setIsListening] = useState(false);
