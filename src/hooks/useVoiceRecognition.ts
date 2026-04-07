@@ -34,7 +34,7 @@ function getSpeechRecognitionAPI(): SpeechRecognitionConstructor | null {
   return (win.SpeechRecognition ?? win.webkitSpeechRecognition ?? null) as SpeechRecognitionConstructor | null;
 }
 
-const ACTIVE_TIMEOUT_MS = 8000; // return to passive after 8s of no command
+const ACTIVE_TIMEOUT_MS = 15000; // return to passive after 15s of no command
 
 export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
   const [isListening, setIsListening] = useState(false);
@@ -120,16 +120,26 @@ export const useVoiceRecognition = (): UseVoiceRecognitionReturn => {
     const recognition = new SpeechRecognitionAPI();
     recognitionRef.current = recognition;
     recognition.continuous = true;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.lang = 'en-US';
     recognition.maxAlternatives = 1;
 
-    recognition.onstart = () => setIsListening(true);
+    recognition.onstart = () => {
+      setIsListening(true);
+      console.log('[Voice] Recognition started, mode:', modeRef.current);
+    };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       const lastIdx = event.results.length - 1;
-      const transcript = event.results[lastIdx][0].transcript.trim();
-      console.log('[Voice] Recognized:', transcript, '| mode:', modeRef.current);
+      const result = event.results[lastIdx];
+      const isFinal = result.isFinal;
+      const transcript = result[0].transcript.trim();
+      console.log('[Voice] Recognized:', transcript, '| final:', isFinal, '| mode:', modeRef.current);
+
+      // In passive mode, only process final results (for wake word detection)
+      if (modeRef.current === 'passive' && !isFinal) return;
+
+      // In active mode, process both interim and final for faster command response
 
       const hasWake = containsWakeWord(transcript);
 
